@@ -39,8 +39,10 @@ def note_num_to_name(n):
         return "DNE"
 
 def HPS(X, sample_rate):
-    # https://github.com/alexanderlerch/pyACA/blob/master/pyACA/PitchSpectralHps.py
-    # returns best f0 fundamental frequency candidate
+    """
+    Computes the Harmonic Product Spectrum
+    Modified From: https://github.com/alexanderlerch/pyACA/blob/master/pyACA/PitchSpectralHps.py
+    """
 
     iOrder = 4
     f_min = 300
@@ -67,9 +69,8 @@ def main():
     num_chunks = data_len//chunk_len
 
     data = data.T[0] # WLOG stero = mono :) 
-    norm_data = data/(2**(16.-1)) # 16bit [-2**15, 2**15] -> norm [-1, 1)
+    norm_data = data/(2**(16.-1)) # 16bit [-2**15, 2**15] -> norm [-1, 1]
 
-    # num_chunks = 2
     fig, axs = plt.subplots(num_chunks, 3, figsize=(12, 4*num_chunks))
     for i in range(num_chunks):
         print(f"CHUNK {i}/{num_chunks-1}")
@@ -80,26 +81,23 @@ def main():
         sort_inds = hps.argsort()[::-1]
         sorted_fhz, sorted_hps = fhz[sort_inds], hps[sort_inds]
 
-        notes = [note_num_to_name(nearest_note_num(hz)) for hz in sorted_fhz]
-        note_set = set()
-
+        notes = [note_num_to_name(nearest_note_num(hz)) for hz in sorted_fhz] # TODO: vectorize        
         filtered_notes = []
+
+        # TODO: optimize
+        note_set = set()
         for note in notes:
             if note not in note_set:
                 filtered_notes.append(note)
                 note_set.add(note)
 
-        print(filtered_notes[:10])
-        # max_power_freq = fhz[np.argmax(hps, axis=0)]
-
-        # print(f"max: {max_power_freq} hz = {note_num_to_name(nearest_note_num(max_power_freq))}")
+        print(filtered_notes[:10]) # arbitrary
 
         axs[i, 0].plot(chunk)
         axs[i, 1].plot(freq, power)
         axs[i, 2].plot(fhz, hps)
     
-    # plt.show()
-    fig.savefig("./chunk_fft.png")
+    fig.savefig("./res/chunk_fft.png")
 
 
 if __name__ == "__main__":
