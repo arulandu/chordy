@@ -14,3 +14,13 @@ A real-time polyphonic pitch detector for perfecting guitar chords.
 
 ## Considerations
 The Harmonic Product Spectrum (HPS) technique is meant to be used for monophonic audio, so this adaptation for polyphonic audio has proven difficult but has shown some promise. 
+
+## References
+```
+@book{lerch2012introduction,
+  title={An introduction to audio content analysis: Applications in signal processing and music informatics},
+  author={Lerch, Alexander},
+  year={2012},
+  publisher={Wiley-IEEE Press}
+}
+``````
