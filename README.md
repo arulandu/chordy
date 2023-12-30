@@ -1,5 +1,5 @@
 # Chordy
-A real-time polyphonic pitch detector for perfecting guitar chords.
+My < 24hr attempt at a real-time polyphonic pitch detector for perfecting guitar chords.
 
 ## Approach
 1. Read a .wav file with guitar chords
