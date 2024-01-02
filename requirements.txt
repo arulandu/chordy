@@ -3,3 +3,4 @@ scipy
 plotly
 matplotlibn
 ipython
+pyaudio

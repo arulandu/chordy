@@ -1,3 +1,5 @@
+# V1: Semi-reliably detects notes using hps + math :)
+
 import numpy as np
 from scipy.io import wavfile
 from scipy import fft
@@ -80,8 +82,9 @@ def main():
 
         sort_inds = hps.argsort()[::-1]
         sorted_fhz, sorted_hps = fhz[sort_inds], hps[sort_inds]
-
-        notes = [note_num_to_name(nearest_note_num(hz)) for hz in sorted_fhz] # TODO: vectorize        
+        hps_threshold = np.max(sorted_hps)*0.05
+        
+        notes = [note_num_to_name(nearest_note_num(hz)) for hz,p in zip(sorted_fhz, sorted_hps) if p > hps_threshold] # TODO: vectorize        
         filtered_notes = []
 
         # TODO: optimize
