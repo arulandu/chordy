@@ -1,3 +1,4 @@
+import os
 import argparse
 from collections import deque
 import traceback
@@ -10,6 +11,10 @@ import threading
 import queue
 import time
 from chord import compute_chords, stream, ChordAlgo
+
+def data_path(p):
+    basedir = os.path.dirname(__file__)
+    return os.path.join(p)
 
 class App(tk.Tk):
     def __init__(self, chunk_queue, chord_queue, tick=500, max_frames=10*2048) -> None:
@@ -33,7 +38,7 @@ class App(tk.Tk):
 
     def init_gui(self):
         self.title("Chordy")
-
+        
         self.geometry('700x350')
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
