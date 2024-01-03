@@ -15,6 +15,9 @@ My < 24hr attempt at a real-time polyphonic pitch detector for perfecting guitar
 ## Considerations
 The Harmonic Product Spectrum (HPS) technique is meant to be used for monophonic audio, so this adaptation for polyphonic audio has proven difficult but has shown some promise. 
 
+## Performance
+GUI ticks at ~23.7fps (42.1 ms/f). Chord avg 6.7ms (~149 per sec). 
+
 ## References
 ```
 @book{lerch2012introduction,

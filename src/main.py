@@ -1,4 +1,5 @@
 from collections import deque
+import traceback
 import tkinter as tk
 import numpy as np
 from tkinter import font
@@ -23,8 +24,16 @@ class App(tk.Tk):
         self.chord_queue = chord_queue
         self.max_frames = max_frames
         
+        self.exited = False
+        self.protocol("WM_DELETE_WINDOW", self.exit)
+
         self.init_gui()
         self.main()
+
+    def exit(self):
+        self.exited = True
+        self.eval("::tk::CancelRepeat")
+        self.destroy()
 
     def init_gui(self):
         self.title("Chordy")
@@ -62,46 +71,49 @@ class App(tk.Tk):
         xpx = np.arange(frames.shape[0])*1.*width/self.max_frames
         pts = np.column_stack([xpx, ypx])
 
-        # TODO: implement better poly smoothing here
-        # f = interp1d(pts[:,0], pts[:,1], fill_value='extrapolate')
-        # x = np.arange(0, width)
-        # y = signal.resample(pts[:,1], width)
-        # print(y.shape, np.max(y), np.min(y))
-        # pts = np.column_stack([x, y])
+        # timeseries resampling: 75ms -> 7ms (display cost)
+        x = np.arange(0, np.min([np.max(xpx), width]), 0.5) # 0.5px prevents wobbly waveform look
+        # y = signal.resample(pts[:,1], width) 
+        y = interp1d(pts[:,0], pts[:,1], fill_value=(float(height)/2, float(height)/2), bounds_error=False)(x)
+        pts = np.column_stack([x, y])
         
         self.canvas.coords(self.polyline_id, list(np.ravel(pts)))
 
     def main(self):
-        def poll():            
-            if len(self.chord_queue) > 0:
-                # flush + get latest
-                data = self.chord_queue[-1]
-                self.chord_queue.clear()
+        def poll():   
+            try:
+                if len(self.chord_queue) > 0:
+                    # flush + get latest
+                    data = self.chord_queue[-1]
+                    self.chord_queue.clear()
 
-                # update gui
-                chord, prob = data
-                
-                if chord is None: chord = "N/A"
-                if prob is None: prob = 0
-
-                self.chord_var.set(chord)
-                self.prob_var.set("{:.2f}%".format(prob*100))
-            
-            if len(self.chunk_queue) > 0:
-                # concatenate up to max
-                frames = np.array([])
-                i = len(self.chunk_queue)-1
-                while i >= 0:
-                    _frames = np.append(frames, self.chunk_queue[i])
-                    if _frames.shape[0] > self.max_frames:
-                        break
-                    else:
-                        frames = _frames
+                    # update gui
+                    chord, prob = data
                     
-                    i -= 1
-                
-                self.plot_waveform(frames)
+                    if chord is None: chord = "N/A"
+                    if prob is None: prob = 0
 
+                    self.chord_var.set(chord)
+                    self.prob_var.set("{:.2f}%".format(prob*100))
+                
+                if len(self.chunk_queue) > 0:
+                    # TODO: use deque / np.array views for better solution to concatenation. main factor to fps
+                    # concatenate up to max
+                    frames = np.array([])
+                    i = len(self.chunk_queue)-1
+                    while i >= 0:
+                        _frames = np.append(self.chunk_queue[i], frames)
+                        if _frames.shape[0] > self.max_frames:
+                            break
+                        else:
+                            frames = _frames
+                        
+                        i -= 1
+
+                    self.plot_waveform(frames)
+            except Exception as e:
+                print(traceback.format_exc())
+                if self.exited: return
 
             self.after(self.tick, poll)
         
@@ -121,7 +133,7 @@ def start_compute(chunk_q, chord_q, poll_delay=0, max_frames=1e99, **kwargs):
             frames = np.array([])
             i = len(chunk_q)-1
             while i >= 0:
-                _frames = np.append(frames, chunk_q[i])
+                _frames = np.append(chunk_q[i], frames)
                 if _frames.shape[0] > max_frames:
                     break
                 else:
@@ -138,22 +150,23 @@ def start_compute(chunk_q, chord_q, poll_delay=0, max_frames=1e99, **kwargs):
 def main():
     chunk_queue = deque([]) # audio (write), compute + gui (read only)
     chord_queue = [] # audio (none), compute (write), gui (read only)
-
+    
+    SAMPLE_RATE = 44100
     CHUNK_SIZE = 1024
-    DISPLAY_CHUNKS = 200
-    CHORD_CHUNKS = 8
+    DISPLAY_CHUNKS = 10
+    CHORD_CHUNKS = 16
     HOP_CHUNKS = 2
     BLOCK_CHUNKS = 8
 
     audio_thread = threading.Thread(
         target=start_stream, 
         args=(chunk_queue, ),
-        kwargs={'max_chunks': DISPLAY_CHUNKS, 'chunk': CHUNK_SIZE}
+        kwargs={'max_chunks': DISPLAY_CHUNKS, 'chunk': CHUNK_SIZE, 'fs': SAMPLE_RATE}
     )
     compute_thread = threading.Thread(
         target=start_compute,
         args=(chunk_queue, chord_queue,), 
-        kwargs={'poll_delay': 0.01, 'fs': 44100, 'max_frames': CHORD_CHUNKS*CHUNK_SIZE, 'iBlockLength':BLOCK_CHUNKS*CHUNK_SIZE, 'iHopLength':HOP_CHUNKS*CHUNK_SIZE, 'algorithm':ChordAlgo.RAW}
+        kwargs={'poll_delay': 0.00, 'fs': SAMPLE_RATE, 'max_frames': CHORD_CHUNKS*CHUNK_SIZE, 'iBlockLength':BLOCK_CHUNKS*CHUNK_SIZE, 'iHopLength':HOP_CHUNKS*CHUNK_SIZE, 'algorithm':ChordAlgo.RAW}
     )
 
     gui = App(chunk_queue, chord_queue, tick=1, max_frames=DISPLAY_CHUNKS*CHUNK_SIZE)

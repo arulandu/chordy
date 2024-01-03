@@ -31,14 +31,12 @@ def norm_audio(x):
 
 def stream(handler=lambda *args, **kwargs : None, chunk=1024, channels=1, fs=44100):
     p = pyaudio.PyAudio()
-    print("initialized pyaudio")
 
     stream = p.open(format=pyaudio.paInt16,
                     channels=channels,
                     rate=fs,
                     frames_per_buffer=chunk,
                     input=True)
-    print("opened stream")
 
     try:
         while True:
@@ -49,7 +47,6 @@ def stream(handler=lambda *args, **kwargs : None, chunk=1024, channels=1, fs=441
     except Exception as e: 
         pass # continue to close the stream
 
-    print("close stream")
     stream.stop_stream()
     stream.close()
     p.terminate()
