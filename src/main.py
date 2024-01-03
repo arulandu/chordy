@@ -3,6 +3,7 @@ import tkinter as tk
 import numpy as np
 from tkinter import font
 from scipy.interpolate import interp1d
+from scipy import signal
 import threading
 import queue
 import time
@@ -55,17 +56,19 @@ class App(tk.Tk):
 
     def plot_waveform(self, frames):
         self.update()
-        width, height = float(self.canvas.winfo_width()), float(self.canvas.winfo_height())
+        width, height = self.canvas.winfo_width(), self.canvas.winfo_height()
 
         t0 = time.time()
         ypx = (frames*-1+1)*height/2
-        xpx = np.arange(frames.shape[0])*width/self.max_frames
+        xpx = np.arange(frames.shape[0])*1.*width/self.max_frames
         pts = np.column_stack([xpx, ypx])
 
         # TODO: implement better poly smoothing here
         # f = interp1d(pts[:,0], pts[:,1], fill_value='extrapolate')
         # x = np.arange(0, width)
-        # pts = np.column_stack([x, f(x)])
+        # y = signal.resample(pts[:,1], width)
+        # print(y.shape, np.max(y), np.min(y))
+        # pts = np.column_stack([x, y])
         
         self.canvas.coords(self.polyline_id, list(np.ravel(pts)))
         print(time.time()-t0)
@@ -138,18 +141,24 @@ def main():
     chunk_queue = deque([]) # audio (write), compute + gui (read only)
     chord_queue = [] # audio (none), compute (write), gui (read only)
 
+    CHUNK_SIZE = 1024
+    DISPLAY_CHUNKS = 200
+    CHORD_CHUNKS = 8
+    HOP_CHUNKS = 2
+    BLOCK_CHUNKS = 8
+
     audio_thread = threading.Thread(
         target=start_stream, 
         args=(chunk_queue, ),
-        kwargs={'max_chunks': 200, 'chunk': 1024}
+        kwargs={'max_chunks': DISPLAY_CHUNKS, 'chunk': CHUNK_SIZE}
     )
     compute_thread = threading.Thread(
         target=start_compute,
         args=(chunk_queue, chord_queue,), 
-        kwargs={'poll_delay': 0.01, 'fs': 44100, 'max_frames': 2048*4, 'iBlockLength':8192, 'iHopLength':2048, 'algorithm':ChordAlgo.RAW}
+        kwargs={'poll_delay': 0.01, 'fs': 44100, 'max_frames': CHORD_CHUNKS*CHUNK_SIZE, 'iBlockLength':BLOCK_CHUNKS*CHUNK_SIZE, 'iHopLength':HOP_CHUNKS*CHUNK_SIZE, 'algorithm':ChordAlgo.RAW}
     )
 
-    gui = App(chunk_queue, chord_queue, tick=15, max_frames=100*2048)
+    gui = App(chunk_queue, chord_queue, tick=1, max_frames=DISPLAY_CHUNKS*CHUNK_SIZE)
 
     audio_thread.daemon = True
     audio_thread.start()

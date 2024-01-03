@@ -4,3 +4,4 @@ plotly
 matplotlibn
 ipython
 pyaudio
+librosa
