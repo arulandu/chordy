@@ -1,7 +1,6 @@
 numpy
 scipy
 plotly
-matplotlibn
+matplotlib
 ipython
 pyaudio
-librosa

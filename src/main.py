@@ -1,19 +1,15 @@
+import argparse
 from collections import deque
 import traceback
 import tkinter as tk
 import numpy as np
-from tkinter import font
+from tkinter import font, PhotoImage
 from scipy.interpolate import interp1d
 from scipy import signal
 import threading
 import queue
 import time
 from chord import compute_chords, stream, ChordAlgo
-"""arial rounded mt bold gm7#
-yuppy sc gm7#
-yugothic
-Baloo 2
-"""
 
 class App(tk.Tk):
     def __init__(self, chunk_queue, chord_queue, tick=500, max_frames=10*2048) -> None:
@@ -37,6 +33,7 @@ class App(tk.Tk):
 
     def init_gui(self):
         self.title("Chordy")
+
         self.geometry('700x350')
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -91,7 +88,7 @@ class App(tk.Tk):
                     chord, prob = data
                     
                     if chord is None: chord = "N/A"
-                    if prob is None: prob = 0
+                    if prob is None or np.isnan(prob): prob = 0
 
                     self.chord_var.set(chord)
                     self.prob_var.set("{:.2f}%".format(prob*100))
@@ -112,8 +109,8 @@ class App(tk.Tk):
 
                     self.plot_waveform(frames)
             except Exception as e:
-                print(traceback.format_exc())
                 if self.exited: return
+                print(traceback.format_exc())
 
             self.after(self.tick, poll)
         
@@ -147,29 +144,22 @@ def start_compute(chunk_q, chord_q, poll_delay=0, max_frames=1e99, **kwargs):
         else:
             time.sleep(poll_delay) # delay iff chunk was empty
 
-def main():
+def main(args):
     chunk_queue = deque([]) # audio (write), compute + gui (read only)
     chord_queue = [] # audio (none), compute (write), gui (read only)
-    
-    SAMPLE_RATE = 44100
-    CHUNK_SIZE = 1024
-    DISPLAY_CHUNKS = 10
-    CHORD_CHUNKS = 16
-    HOP_CHUNKS = 2
-    BLOCK_CHUNKS = 8
 
     audio_thread = threading.Thread(
         target=start_stream, 
         args=(chunk_queue, ),
-        kwargs={'max_chunks': DISPLAY_CHUNKS, 'chunk': CHUNK_SIZE, 'fs': SAMPLE_RATE}
+        kwargs={'max_chunks': args.display_chunks, 'chunk': args.chunk_size, 'fs': args.fs}
     )
     compute_thread = threading.Thread(
         target=start_compute,
         args=(chunk_queue, chord_queue,), 
-        kwargs={'poll_delay': 0.00, 'fs': SAMPLE_RATE, 'max_frames': CHORD_CHUNKS*CHUNK_SIZE, 'iBlockLength':BLOCK_CHUNKS*CHUNK_SIZE, 'iHopLength':HOP_CHUNKS*CHUNK_SIZE, 'algorithm':ChordAlgo.RAW}
+        kwargs={'poll_delay': 0.00, 'fs': args.fs, 'max_frames': args.chord_chunks*args.chunk_size, 'iBlockLength':args.block_chunks*args.chunk_size, 'iHopLength':args.hop_chunks*args.chunk_size, 'algorithm': args.algorithm}
     )
 
-    gui = App(chunk_queue, chord_queue, tick=1, max_frames=DISPLAY_CHUNKS*CHUNK_SIZE)
+    gui = App(chunk_queue, chord_queue, tick=1, max_frames=args.display_chunks*args.chunk_size)
 
     audio_thread.daemon = True
     audio_thread.start()
@@ -180,5 +170,29 @@ def main():
     gui.mainloop()
     
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(
+        prog='chordy', 
+        usage="%(prog)s [options] [audio] [gui] [algo]",
+        description="A configurable, multi-threaded, real-time chord detector!",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+
+    audio = parser.add_argument_group('audio')
+    audio.add_argument('--sample-rate', '-fs', dest='fs', type=int, default=44100, help="Audio sample rate in frames per second")
+    audio.add_argument('--chunk-size', '-cs', dest='chunk_size', type=int, default=1024, help="Number of samples per streamed chunk")
+
+    gui = parser.add_argument_group('gui')
+    gui.add_argument('--display-chunks', '-d', dest='display_chunks', type=int, default=200, help="Number of chunks to display in viewer waveform")
+
+    algo = parser.add_argument_group('algo')
+    algo.add_argument('--chord-chunks', '-cc', dest="chord_chunks", type=int, default=8, help="Number of chunks to send to chord recognition algorithm")
+    algo.add_argument('--hop-chunks', '-hc', dest='hop_chunks', type=int, default=2, help="Number of chunks to hop")
+    algo.add_argument('--block-chunks', '-bc', dest='block_chunks', type=int, default=2, help="Number of chunks per block")
+    algo.add_argument('--algorithm', type=ChordAlgo.from_str, dest="algorithm", choices=list(ChordAlgo), default=ChordAlgo.RAW, help="Choice of recognition algorithm")
+    algo.add_argument('--raw', dest="algorithm", action='store_const', const=ChordAlgo.RAW, help="Use raw chords and probabilities")
+    algo.add_argument('--viterbi', dest="algorithm", action='store_const', const=ChordAlgo.VITERBI, help="Use Markov Chains / Viterbi Algorithm to process raw chord probabilities")
+
+    args = parser.parse_args()
+    print(args)
+    main(args)
     

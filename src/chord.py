@@ -1,3 +1,4 @@
+import traceback
 from enum import IntEnum
 from collections import Counter
 from pyACA import computeChords, computeChordsCl
@@ -45,7 +46,8 @@ def stream(handler=lambda *args, **kwargs : None, chunk=1024, channels=1, fs=441
 
             handler(data)
     except Exception as e: 
-        pass # continue to close the stream
+        print(traceback.format_exc())
+        # continue to close the stream
 
     stream.stop_stream()
     stream.close()
@@ -54,6 +56,16 @@ def stream(handler=lambda *args, **kwargs : None, chunk=1024, channels=1, fs=441
 class ChordAlgo(IntEnum):
     RAW = 0
     VITERBI = 1
+
+    def __str__(self):
+        return self.name
+
+    @staticmethod
+    def from_str(s: str):
+        try:
+            return ChordAlgo[s.upper()]
+        except KeyError:
+            raise ValueError()
 
 def formatChordLabel(label: str):
     return label.upper().replace("MAJ", "").replace("MIN", "m").replace(" ", "")

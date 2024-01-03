@@ -4,3 +4,6 @@ private
 
 __pycache__
 *.pyc
+
+build
+dist
