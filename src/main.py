@@ -1,6 +1,8 @@
+from collections import deque
 import tkinter as tk
 import numpy as np
 from tkinter import font
+from scipy.interpolate import interp1d
 import threading
 import queue
 import time
@@ -55,11 +57,21 @@ class App(tk.Tk):
         self.update()
         width, height = float(self.canvas.winfo_width()), float(self.canvas.winfo_height())
 
-        pts = np.array([[i*width/self.max_frames, (f*-1+1)*height/2] for i, f in enumerate(frames)])
+        t0 = time.time()
+        ypx = (frames*-1+1)*height/2
+        xpx = np.arange(frames.shape[0])*width/self.max_frames
+        pts = np.column_stack([xpx, ypx])
+
+        # TODO: implement better poly smoothing here
+        # f = interp1d(pts[:,0], pts[:,1], fill_value='extrapolate')
+        # x = np.arange(0, width)
+        # pts = np.column_stack([x, f(x)])
+        
         self.canvas.coords(self.polyline_id, list(np.ravel(pts)))
+        print(time.time()-t0)
 
     def main(self):
-        def poll():
+        def poll():            
             if len(self.chord_queue) > 0:
                 # flush + get latest
                 data = self.chord_queue[-1]
@@ -94,13 +106,12 @@ class App(tk.Tk):
         
         poll()
 
-def start_stream(q:list):
-    t0 = time.time()
+def start_stream(q, max_chunks=100, **kwargs):
     def handler(chunk):
         q.append(chunk) # put frames into compute queue
-        # TODO: cyclic buffer. discard after a bit
+        if len(q) > max_chunks: q.popleft()
 
-    stream(handler, chunk=1024) # avg 0.01s btwn chunks for size = 1024
+    stream(handler, **kwargs) # avg 0.01s btwn chunks for size = 1024
 
 def start_compute(chunk_q, chord_q, poll_delay=0, max_frames=1e99, **kwargs):
     while True:
@@ -124,17 +135,21 @@ def start_compute(chunk_q, chord_q, poll_delay=0, max_frames=1e99, **kwargs):
             time.sleep(poll_delay) # delay iff chunk was empty
 
 def main():
-    chunk_queue = [] # audio (write), compute + gui (read only)
+    chunk_queue = deque([]) # audio (write), compute + gui (read only)
     chord_queue = [] # audio (none), compute (write), gui (read only)
 
-    audio_thread = threading.Thread(target=start_stream, args=(chunk_queue, ))
+    audio_thread = threading.Thread(
+        target=start_stream, 
+        args=(chunk_queue, ),
+        kwargs={'max_chunks': 200, 'chunk': 1024}
+    )
     compute_thread = threading.Thread(
         target=start_compute,
         args=(chunk_queue, chord_queue,), 
         kwargs={'poll_delay': 0.01, 'fs': 44100, 'max_frames': 2048*4, 'iBlockLength':8192, 'iHopLength':2048, 'algorithm':ChordAlgo.RAW}
     )
 
-    gui = App(chunk_queue, chord_queue, tick=15, max_frames=25*2048)
+    gui = App(chunk_queue, chord_queue, tick=15, max_frames=100*2048)
 
     audio_thread.daemon = True
     audio_thread.start()
@@ -144,9 +159,6 @@ def main():
 
     gui.mainloop()
     
-    
 if __name__ == '__main__':
     main()
     
-
-
