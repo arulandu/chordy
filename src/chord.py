@@ -2,6 +2,7 @@ from enum import IntEnum
 from collections import Counter
 from pyACA import computeChords, computeChordsCl
 
+import threading
 import sys
 import numpy as np
 import pyaudio
@@ -28,7 +29,7 @@ def norm_audio(x):
 
     return audio
 
-def stream(handler=lambda *args, **kwargs : None, max_frames=1e99, chunk=1024, channels=1, fs=44100):
+def stream(handler=lambda *args, **kwargs : None, chunk=1024, channels=1, fs=44100):
     p = pyaudio.PyAudio()
     print("initialized pyaudio")
 
@@ -39,20 +40,13 @@ def stream(handler=lambda *args, **kwargs : None, max_frames=1e99, chunk=1024, c
                     input=True)
     print("opened stream")
 
-    frames = np.array([])
-
     try:
         while True:
             bdata = stream.read(chunk)
             data = norm_audio(np.frombuffer(bdata, dtype=np.int16))
 
-            frames = np.append(frames, data)
-            if frames.shape[0] >= max_frames:
-                frames = frames[-max_frames:]
-
-            handler(frames, fs=fs)
-            
-    except KeyboardInterrupt: 
+            handler(data)
+    except Exception as e: 
         pass # continue to close the stream
 
     print("close stream")
@@ -64,30 +58,27 @@ class ChordAlgo(IntEnum):
     RAW = 0
     VITERBI = 1
 
-def make_chord_handler(callback=lambda *args, **kwargs : None, threshold=0.05, algorithm=ChordAlgo.RAW, iBlockLength=8192, iHopLength=2048):
-    def handler(frames, *args, **kwargs):
-        fs = kwargs['fs']
-        
-        cChordLabel, aiChordIdx, t, P_E = computeChords(frames, fs, iBlockLength=iBlockLength, iHopLength=iHopLength)
-        chordLabel, chordIdx = cChordLabel[algorithm], aiChordIdx[algorithm]
-
-        chordLabel = np.array(chordLabel)
-
-        chordDict = {}
-        for i,chord in enumerate(chordLabel):
-            if chord not in chordDict: chordDict[chord] = 0
-            chordDict[chord] += P_E[chordIdx[i]][0]   
-        mostLikelyChord = list(max(chordDict.items(), key=lambda x: x[1]))
-        mostLikelyChord[1] /= len(chordLabel) # max avg probability of chord over frames
-
-        chord, prob = mostLikelyChord
-        chord = formatChordLabel(chord)
-        if prob < threshold:
-            chord = None
-        
-        callback(chord, prob)
-        
-    return handler
-
 def formatChordLabel(label: str):
     return label.upper().replace("MAJ", "").replace("MIN", "m").replace(" ", "")
+
+def compute_chords(frames, fs=44100, threshold=0.05, algorithm=ChordAlgo.RAW, iBlockLength=8192, iHopLength=2048):
+    cChordLabel, aiChordIdx, t, P_E = computeChords(frames, fs, iBlockLength=iBlockLength, iHopLength=iHopLength)
+    chordLabel, chordIdx = cChordLabel[algorithm], aiChordIdx[algorithm]
+
+    chordLabel = np.array(chordLabel)
+
+    chordDict = {}
+    for i,chord in enumerate(chordLabel):
+        if chord not in chordDict: chordDict[chord] = 0
+        chordDict[chord] += P_E[chordIdx[i]][0]   
+    mostLikelyChord = list(max(chordDict.items(), key=lambda x: x[1]))
+    mostLikelyChord[1] /= len(chordLabel) # max avg probability of chord over frames
+
+    chord, prob = mostLikelyChord
+    chord = formatChordLabel(chord)
+    if prob < threshold:
+        chord = None
+    
+    return chord, prob
+
+
