@@ -58,7 +58,6 @@ class App(tk.Tk):
         self.update()
         width, height = self.canvas.winfo_width(), self.canvas.winfo_height()
 
-        t0 = time.time()
         ypx = (frames*-1+1)*height/2
         xpx = np.arange(frames.shape[0])*1.*width/self.max_frames
         pts = np.column_stack([xpx, ypx])
@@ -71,7 +70,6 @@ class App(tk.Tk):
         # pts = np.column_stack([x, y])
         
         self.canvas.coords(self.polyline_id, list(np.ravel(pts)))
-        print(time.time()-t0)
 
     def main(self):
         def poll():            
