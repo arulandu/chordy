@@ -1,7 +1,7 @@
 <h1 align="center">
   <div align="center">
     <a href="https://youtube.com/watch?v=-3eEzzKrywo" target="_blank">
-      <img src="https://img.youtube.com/vi/-3eEzzKrywo/0.jpg">
+      <img src="https://img.youtube.com/vi/-3eEzzKrywo/maxresdefault.jpg" width="480px">
     </a>
   </div>
   Chordy
