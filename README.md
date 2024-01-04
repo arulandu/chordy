@@ -40,7 +40,7 @@ In case you missed it, check out the [demo](https://youtube.com/watch?v=-3eEzzKr
 See `/release/chordy` for the MacOS binary. Add to PATH if needed.
 
 ### MacOS `.dmg`
-See `/release/Chordy.dmg`. Some users may experience a malicious software warning when running the application. Navigate to `Settings > Privacy and Security`, scroll down, and choose `Open Anyway`. 
+See `/release/Chordy.dmg`. Some users may experience a malicious software warning when running the application. To avoid this, choose `Open in Finder`. Right click on `Chordy` and choose `Open` from the dropdown. Then, click `Open` again. `Chordy` will request permission to access your microphone and start running. After doing this once, the application can be opened directly from Launchpad. 
 
 ### Source Build
 For Windows / Linux users, a source build is mandatory.
