@@ -25,25 +25,41 @@
   </a>
 </h4>
 
-## Architecture
+## Implementation
 Chordy maintains three threads to isolate audio streaming, chord recognition, and GUI rendering, with dequeues for data management.
+- Chordy uses `pyaudio` to stream microphone audio into a queue of chunks. 
+- Chordy uses interpretable, analytic techniques instead of machine learning, building on Alexander Lerch's `pyACA` package. See `compute_chords` in `chord.py` for the implementation.
+- Chordy uses Python's default `tkinter` package for GUI rendering, as well as `scipy` for timeseries resampling. 
 
-### Audio Streaming
-Chordy uses `pyaudio` to stream microphone audio into a queue of chunks. 
-
-### Chord Recognition
-Chordy uses interpretable, analytic techniques instead of machine learning, building on Alexander Lerch's `pyACA` package. See `compute_chords` in `chord.py` for the implementation.
-
-### Graphics
-Chordy uses Python's default `tkinter` package for GUI rendering, as well as `scipy` for timeseries resampling. 
-
-## Performance
 The GUI application ticks at ~23.7fps (42.1 ms/f), while the chord detection itself takes ~6.7ms (~149 per sec). 
 
 ## Usage
 In case you missed it, check out the [demo](https://youtube.com/watch?v=-3eEzzKrywo) for guitar!
-### MacOS CLI Tool
-See `/release/chordy` for an executable MacOS CLI tool. Add to PATH if needed and refer to the following usage guidelines:
+
+### MacOS Binary
+See `/release/chordy` for the MacOS binary. Add to PATH if needed.
+
+### MacOS `.dmg`
+See `/release/Chordy.dmg`. Some users may experience a malicious software warning when running the application. Navigate to `Settings > Privacy and Security`, scroll down, and choose `Open Anyway`. 
+
+### Source Build
+For Windows / Linux users, a source build is mandatory.
+
+1. Begin by cloning the repository.
+```bash
+$: git clone https://github.com/arulandu/chordy.git && cd chordy
+```
+2. Use your python package manager to install the dependencies.
+```bash
+$: pip install -r requirements.txt
+```
+3. Run `main.py` to start the application!
+```bash
+$: python src/main.py
+```
+
+### Usage Guidlines
+Please refer to the following usage guidelines:
 ```
 usage: chordy [options] [audio] [gui] [algo]
 
@@ -76,20 +92,6 @@ algo:
   --threshold THRESHOLD, -t THRESHOLD
                         Minimum probability for a detected chord (default: 0.07)
 ```
-### MacOS `.dmg`
-See `/release/Chordy.dmg`. Some users may experience a malicious software warning when running the application. Navigate to `Settings > Privacy and Security`, scroll down, and choose `Open Anyway`. 
-
-### Source Build
-For Windows / Linux users, a source build is mandatory.
-
-1. Begin by cloning the repository.
-```bash
-$: git clone https://github.com/arulandu/chordy.git && cd chordy
-```
-2. Use your python manager to install the dependencies.
-```bash
-$: pip install -r requirements.txt
-```Clone the respository, install the dependencies, and run `python src/main.py`. Run `python src/main.py -h` for assistance.
 
 ## Contribution
 This project is open to contribution! Feel free to open a PR / GitHub issue!
