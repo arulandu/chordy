@@ -74,7 +74,7 @@ class App(tk.Tk):
         pts = np.column_stack([xpx, ypx])
 
         # timeseries resampling: 75ms -> 7ms (display cost)
-        x = np.arange(0, np.min([np.max(xpx), width]), 0.5) # 0.5px prevents wobbly waveform look
+        x = np.arange(0, np.min([np.max(xpx), width]), 0.25) # 0.5px prevents wobbly waveform look
         # y = signal.resample(pts[:,1], width) 
         y = interp1d(pts[:,0], pts[:,1], fill_value=(float(height)/2, float(height)/2), bounds_error=False)(x)
         pts = np.column_stack([x, y])
@@ -161,7 +161,7 @@ def main(args):
     compute_thread = threading.Thread(
         target=start_compute,
         args=(chunk_queue, chord_queue,), 
-        kwargs={'poll_delay': 0.00, 'fs': args.fs, 'max_frames': args.chord_chunks*args.chunk_size, 'iBlockLength':args.block_chunks*args.chunk_size, 'iHopLength':args.hop_chunks*args.chunk_size, 'algorithm': args.algorithm}
+        kwargs={'poll_delay': 0.00, 'fs': args.fs, 'max_frames': args.chord_chunks*args.chunk_size, 'iBlockLength':args.block_chunks*args.chunk_size, 'iHopLength':args.hop_chunks*args.chunk_size, 'algorithm': args.algorithm, 'threshold': args.threshold}
     )
 
     gui = App(chunk_queue, chord_queue, tick=1, max_frames=args.display_chunks*args.chunk_size)
@@ -193,11 +193,12 @@ if __name__ == '__main__':
     algo.add_argument('--chord-chunks', '-cc', dest="chord_chunks", type=int, default=8, help="Number of chunks to send to chord recognition algorithm")
     algo.add_argument('--hop-chunks', '-hc', dest='hop_chunks', type=int, default=2, help="Number of chunks to hop")
     algo.add_argument('--block-chunks', '-bc', dest='block_chunks', type=int, default=2, help="Number of chunks per block")
-    algo.add_argument('--algorithm', type=ChordAlgo.from_str, dest="algorithm", choices=list(ChordAlgo), default=ChordAlgo.RAW, help="Choice of recognition algorithm")
+    algo.add_argument('--algorithm', '-a', type=ChordAlgo.from_str, dest="algorithm", choices=list(ChordAlgo), default=ChordAlgo.RAW, help="Choice of recognition algorithm")
     algo.add_argument('--raw', dest="algorithm", action='store_const', const=ChordAlgo.RAW, help="Use raw chords and probabilities")
     algo.add_argument('--viterbi', dest="algorithm", action='store_const', const=ChordAlgo.VITERBI, help="Use Markov Chains / Viterbi Algorithm to process raw chord probabilities")
+    algo.add_argument('--threshold', '-t', dest="threshold", type=float, default=0.07, help="Minimum probability for a detected chord")
 
     args = parser.parse_args()
-    print(args)
+
     main(args)
     

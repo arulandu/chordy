@@ -4,3 +4,4 @@ plotly
 matplotlib
 ipython
 pyaudio
+pyACA
