@@ -14,7 +14,7 @@
 
 
 <h4 align="center">
-  <a href="https://opensource.org/licenses/Apache-2.0" target="_blank">
+  <a href="https://opensource.org/licenses/mit" target="_blank">
     <img src="https://img.shields.io/badge/MIT-blue.svg?label=license" alt="license" style="height: 20px;">
   </a>
   <a href="[https://youtube.com/watch?v=-3eEzzKrywo](http://makeapullrequest.com)" target="_blank">
