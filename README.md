@@ -1,6 +1,6 @@
 <h1 align="center">
   <div align="center">
-    <a href="https://youtube.com/watch?v=-3eEzzKrywo">
+    <a href="https://youtube.com/watch?v=-3eEzzKrywo" target="_blank">
       <img src="https://img.youtube.com/vi/-3eEzzKrywo/0.jpg">
     </a>
   </div>
@@ -14,13 +14,13 @@
 
 
 <h4 align="center">
-  <a href="https://opensource.org/licenses/Apache-2.0">
+  <a href="https://opensource.org/licenses/Apache-2.0" target="_blank">
     <img src="https://img.shields.io/badge/MIT-blue.svg?label=license" alt="license" style="height: 20px;">
   </a>
-  <a href="[https://youtube.com/watch?v=-3eEzzKrywo](http://makeapullrequest.com)">
+  <a href="[https://youtube.com/watch?v=-3eEzzKrywo](http://makeapullrequest.com)" target="_blank">
     <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=shields" alt="pr" style="height: 20px;">
   </a>
-  <a href="https://youtube.com/watch?v=-3eEzzKrywo">
+  <a href="https://youtube.com/watch?v=-3eEzzKrywo" target="_blank">
     <img src="https://img.shields.io/badge/youtube-d95652.svg?logo=youtube" alt="youtube" style="height: 20px;">
   </a>
 </h4>
@@ -41,6 +41,7 @@ Chordy uses Python's default `tkinter` package for GUI rendering, as well as `sc
 The GUI application ticks at ~23.7fps (42.1 ms/f), while the chord detection itself takes ~6.7ms (~149 per sec). 
 
 ## Usage
+In case you missed it, check out the [demo](https://youtube.com/watch?v=-3eEzzKrywo) for guitar!
 ### MacOS CLI Tool
 See `/release/chordy` for an executable MacOS CLI tool. Add to PATH if needed and refer to the following usage guidelines:
 ```
