@@ -1,6 +1,29 @@
-# Chordy
-A configurable, multi-threaded, real-time chord detector for musicians and audio nerds. \
-[Demo](https://youtu.be/-3eEzzKrywo)
+<h1 align="center">
+  <div align="center">
+    <a href="https://youtube.com/watch?v=-3eEzzKrywo">
+      <img src="https://img.youtube.com/vi/-3eEzzKrywo/0.jpg">
+    </a>
+  </div>
+  Chordy
+  <br>
+</h1>
+
+<p align="center">
+  A configurable, multi-threaded, real-time chord detector for musicians and audio nerds.
+</p>
+
+
+<h4 align="center">
+  <a href="https://opensource.org/licenses/Apache-2.0">
+    <img src="https://img.shields.io/badge/MIT-blue.svg?label=license" alt="license" style="height: 20px;">
+  </a>
+  <a href="[https://youtube.com/watch?v=-3eEzzKrywo](http://makeapullrequest.com)">
+    <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=shields" alt="pr" style="height: 20px;">
+  </a>
+  <a href="https://youtube.com/watch?v=-3eEzzKrywo">
+    <img src="https://img.shields.io/badge/youtube-d95652.svg?logo=youtube" alt="youtube" style="height: 20px;">
+  </a>
+</h4>
 
 ## Architecture
 Chordy maintains three threads to isolate audio streaming, chord recognition, and GUI rendering, with dequeues for data management.
