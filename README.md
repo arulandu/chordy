@@ -80,7 +80,16 @@ algo:
 See `/release/Chordy.dmg`. Some users may experience a malicious software warning when running the application. Navigate to `Settings > Privacy and Security`, scroll down, and choose `Open Anyway`. 
 
 ### Source Build
-For Windows / Linux users, a source build is mandatory. Clone the respository, install the dependencies, and run `python src/main.py`. Run `python src/main.py -h` for assistance.
+For Windows / Linux users, a source build is mandatory.
+
+1. Begin by cloning the repository.
+```bash
+$: git clone https://github.com/arulandu/chordy.git && cd chordy
+```
+2. Use your python manager to install the dependencies.
+```bash
+$: pip install -r requirements.txt
+```Clone the respository, install the dependencies, and run `python src/main.py`. Run `python src/main.py -h` for assistance.
 
 ## Contribution
 This project is open to contribution! Feel free to open a PR / GitHub issue!
