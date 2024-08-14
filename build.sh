@@ -1,0 +1,1 @@
+cmake -B./build -S. && make -C ./build && cp ./build/chordy chordy
