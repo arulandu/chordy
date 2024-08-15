@@ -3,6 +3,16 @@
 #include <algorithm>
 #include "chord.h"
 
+ChordComputeData* initChordComputeData(int n) {
+    ChordComputeData* x = (ChordComputeData*)malloc(sizeof(ChordComputeData));
+    x->spec = (float*)malloc(sizeof(float)*n);
+    return x;
+}
+
+void freeChordComputeData(ChordComputeData* x) {
+    free(x->spec); delete x;
+}
+
 ChordConfig initChordConfig(int n, float sampleRate) {
     ChordConfig cfg;
     cfg.n = n;
@@ -17,6 +27,7 @@ void freeChordConfig(ChordConfig& cfg) {
     free(cfg.in); free(cfg.out); free(cfg.cfg);
 }
 
+// TODO: populate out.spec and display FFT spectra
 void computeChord(ChordComputeData& out, float* samples, ChordConfig& cfg) {
     for(int i = 0; i < cfg.n; i++) cfg.in[i].r = samples[i];
 

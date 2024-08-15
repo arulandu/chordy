@@ -94,7 +94,7 @@ void compute(Settings &settings, ComputeContext &ctx){
         if(available > 0){
             PaUtil_ReadRingBuffer(&ctx.rBuffFromGui, readData, available);
             float* samples = &readData[n*(available-1)];
-            ChordComputeData* pt = (ChordComputeData*) malloc(sizeof(ChordComputeData)); 
+            ChordComputeData* pt = initChordComputeData(n); 
             computeChord(*pt, samples, cfg);
             PaUtil_WriteRingBuffer(&ctx.rBuffToGui, &pt, 1);
         }
@@ -265,7 +265,7 @@ int gui()
             ChordComputeData* data;
             while(available--) PaUtil_ReadRingBuffer(&computeCtx.rBuffToGui, &data, 1); // TODO: Optimize
             state.chordName = data->name;
-            delete data;
+            freeChordComputeData(data);
         }
 
         glfwPollEvents();

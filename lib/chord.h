@@ -13,6 +13,8 @@ struct ChordComputeData {
     float* spec;
 };
 
+ChordComputeData* initChordComputeData(int n);
+void freeChordComputeData(ChordComputeData* x);
 ChordConfig initChordConfig(int n, float sampleRate);
 void freeChordConfig(ChordConfig& cfg);
 void computeChord(ChordComputeData& out, float* samples, ChordConfig& cfg);
