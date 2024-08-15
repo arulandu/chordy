@@ -13,6 +13,8 @@
 #include "pa_ringbuffer.h"
 #include "pa_util.h"
 
+#include "chord.h"
+
 #define GL_SILENCE_DEPRECATION
 #if defined(IMGUI_IMPL_OPENGL_ES2)
 #include <GLES2/gl2.h>
@@ -35,7 +37,6 @@
 
 struct GuiState { 
     std::string chordName = "C#";
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 };
 
 struct PaContext {
@@ -63,15 +64,50 @@ static int pa_error_handler(PaError err){
 }
 
 struct ComputeContext {
-     
+    bool run = true;     
+
+    PaUtilRingBuffer rBuffFromGui;
+    void* rBuffFromGuiData;
+
+    PaUtilRingBuffer rBuffToGui;
+    void* rBuffToGuiData;
 };
 
-void compute(ComputeContext data){
+struct ComputeToGuiData {
+    std::string s;
+};
 
+struct Settings {
+    float sampleRate = 44100.0;
+    unsigned long samplesPerBuffer = 1024;
+    int ringBufferCount = 64;
+    int displaySamples = 1024*256;
+    int displayBufferCount = (displaySamples/samplesPerBuffer) + (displaySamples % samplesPerBuffer == 0 ? 0 : 1);
+    int computeBufferCount = 8; // must be < displayBufferCount
+    int computeRingFrameCount = 2; // choose small, even 1 tbh
+};
+
+void compute(Settings &settings, ComputeContext &ctx){
+    float* readData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*settings.samplesPerBuffer*settings.computeBufferCount*settings.computeRingFrameCount);
+    while(ctx.run) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        int available = PaUtil_GetRingBufferReadAvailable(&ctx.rBuffFromGui);
+        if(available > 0){
+            PaUtil_ReadRingBuffer(&ctx.rBuffFromGui, readData, available);
+            float* frameData = &readData[settings.samplesPerBuffer*settings.computeBufferCount*(available-1)];
+            ComputeToGuiData data; 
+            computeChord(data.s, frameData, settings.samplesPerBuffer*settings.computeBufferCount, settings.sampleRate);
+            PaUtil_WriteRingBuffer(&ctx.rBuffToGui, &data, 1);
+        }
+    }
+
+    if(readData) PaUtil_FreeMemory(readData);
 }
 
 int gui()
 {
+    Settings settings;
+
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
         return 1;
@@ -142,26 +178,20 @@ int gui()
     PaError paErr;
     paErr = Pa_Initialize();
     if(paErr != paNoError) return pa_error_handler(paErr);
-    
-    const float sampleRate = 44100.0;
-    const unsigned long samplesPerBuffer = 1024;
-    const int ringBufferCount = 64;
-    const int displaySamples = 1024*256;
-    const int displayBufferCount = (displaySamples/samplesPerBuffer) + (displaySamples % samplesPerBuffer == 0 ? 0 : 1);
 
     PaContext paCtx;
-    paCtx.rBuffFromRTData = PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t) * samplesPerBuffer * ringBufferCount);
+    paCtx.rBuffFromRTData = PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t) * settings.samplesPerBuffer * settings.ringBufferCount);
     if(paCtx.rBuffFromRTData == nullptr) return 1;
-    PaUtil_InitializeRingBuffer(&paCtx.rBuffFromRT, sizeof(float32_t)*samplesPerBuffer, ringBufferCount, paCtx.rBuffFromRTData);
-    float* readData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*samplesPerBuffer*ringBufferCount);
-    float* displayData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*displayBufferCount*samplesPerBuffer);
-    float* tmpData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*displayBufferCount*samplesPerBuffer);
+    PaUtil_InitializeRingBuffer(&paCtx.rBuffFromRT, sizeof(float32_t)*settings.samplesPerBuffer, settings.ringBufferCount, paCtx.rBuffFromRTData);
+    float* readData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*settings.samplesPerBuffer*settings.ringBufferCount);
+    float* displayData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*settings.displayBufferCount*settings.samplesPerBuffer);
+    float* tmpData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*settings.displayBufferCount*settings.samplesPerBuffer);
     int displayWriteInd = 0;
     
-    float xDisplay[samplesPerBuffer*displayBufferCount], xRead[samplesPerBuffer*ringBufferCount];
-    for(int i = 0; i < samplesPerBuffer*displayBufferCount; i++){
+    float xDisplay[settings.samplesPerBuffer*settings.displayBufferCount], xRead[settings.samplesPerBuffer*settings.ringBufferCount];
+    for(int i = 0; i < settings.samplesPerBuffer*settings.displayBufferCount; i++){
         xDisplay[i] = i;
-        if(i < samplesPerBuffer*ringBufferCount) xRead[i] = i;
+        if(i < settings.samplesPerBuffer*settings.ringBufferCount) xRead[i] = i;
     }
 
     PaStreamParameters inputParams;
@@ -174,17 +204,18 @@ int gui()
 
     PaStream* stream;    
     const PaStreamFlags paFlags = paDitherOff;
-    paErr = Pa_OpenStream(&stream, &inputParams, nullptr, sampleRate, samplesPerBuffer, paFlags, paCallback, &paCtx);
+    paErr = Pa_OpenStream(&stream, &inputParams, nullptr, settings.sampleRate, settings.samplesPerBuffer, paFlags, paCallback, &paCtx);
     if(paErr != paNoError) return pa_error_handler(paErr);
     paErr = Pa_StartStream(stream);
     if(paErr != paNoError) return pa_error_handler(paErr);
 
-    ComputeContext computeContext;
-
     // initialize compute thread
-    std::thread computeThread([&computeContext]() {
-
-    });
+    ComputeContext computeCtx;
+    computeCtx.rBuffFromGuiData = PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*settings.samplesPerBuffer*settings.computeBufferCount*settings.computeRingFrameCount);
+    PaUtil_InitializeRingBuffer(&computeCtx.rBuffFromGui, sizeof(float32_t)*settings.samplesPerBuffer*settings.computeBufferCount, settings.computeRingFrameCount, computeCtx.rBuffFromGuiData);
+    computeCtx.rBuffToGuiData = PaUtil_AllocateZeroInitializedMemory(sizeof(ComputeToGuiData)*settings.computeRingFrameCount);
+    PaUtil_InitializeRingBuffer(&computeCtx.rBuffToGui, sizeof(ComputeToGuiData), settings.computeRingFrameCount, computeCtx.rBuffToGuiData);
+    std::thread computeThread(compute, std::ref(settings), std::ref(computeCtx));
 
     // TODO: load fonts (see imgui docs)
     // state 
@@ -207,13 +238,13 @@ int gui()
         
         auto available = PaUtil_GetRingBufferReadAvailable(&paCtx.rBuffFromRT);
         PaUtil_ReadRingBuffer(&paCtx.rBuffFromRT, (void*)readData, available);
-        available *= samplesPerBuffer;
+        available *= settings.samplesPerBuffer;
 
         if(available > 0){
             // std::cout << "Read " << available << " Ind: " << displayWriteInd;
-            int countRight = displayBufferCount*samplesPerBuffer-displayWriteInd, countLeft = 0;
+            int countRight = settings.displayBufferCount*settings.samplesPerBuffer-displayWriteInd, countLeft = 0;
             if(available > countRight){
-                countLeft = available - countRight; // ensure that displayBufferCount >= ringBufferCount
+                countLeft = available - countRight; // ensure that settings.displayBufferCount >= settings.ringBufferCount
                 memcpy(&tmpData[displayWriteInd], readData, sizeof(float32_t)*countRight);
                 memcpy(&tmpData[0], &readData[countRight], sizeof(float32_t)*countLeft);
                 displayWriteInd = countLeft;
@@ -223,9 +254,17 @@ int gui()
                 displayWriteInd += countRight;
             }
 
-            memcpy(displayData, &tmpData[displayWriteInd], sizeof(float32_t)*(displayBufferCount*samplesPerBuffer-displayWriteInd));
-            memcpy(&displayData[samplesPerBuffer*displayBufferCount-displayWriteInd], tmpData, sizeof(float32_t)*displayWriteInd);
+            memcpy(displayData, &tmpData[displayWriteInd], sizeof(float32_t)*(settings.displayBufferCount*settings.samplesPerBuffer-displayWriteInd));
+            memcpy(&displayData[settings.samplesPerBuffer*settings.displayBufferCount-displayWriteInd], tmpData, sizeof(float32_t)*displayWriteInd);
             // std::cout << " FInd: " << displayWriteInd << '\n';
+            PaUtil_WriteRingBuffer(&computeCtx.rBuffFromGui, &displayData[settings.samplesPerBuffer*(settings.displayBufferCount-settings.computeBufferCount)], 1);
+        }
+        
+        available = PaUtil_GetRingBufferReadAvailable(&computeCtx.rBuffToGui);
+        if(available > 0) {
+            ComputeToGuiData data;
+            while(available--) PaUtil_ReadRingBuffer(&computeCtx.rBuffToGui, &data, 1); // TODO: Optimize
+            state.chordName = data.s;
         }
 
         glfwPollEvents();
@@ -252,15 +291,14 @@ int gui()
 
             auto winSize = ImGui::GetWindowSize();
 
+            ImGui::TextColored(ImVec4(1, 1, 1, 1), std::to_string(io.Framerate).c_str());
+
             ImGui::SetWindowFontScale(4.0);
             ImGui::SetCursorPosX((winSize.x - ImGui::CalcTextSize(state.chordName.c_str()).x)*0.5f);
             ImGui::SetCursorPosY((winSize.y - ImGui::CalcTextSize(state.chordName.c_str()).y)*0.25f);
             ImGui::TextColored(ImVec4(1, 1, 1, 1), state.chordName.c_str());
-            // ImGui::TextColored(ImVec4(1, 1, 1, 1), std::to_string(displayWriteInd).c_str());
-            // ImGui::TextColored(ImVec4(1, 1, 1, 1), std::to_string(available/samplesPerBuffer).c_str());
-            ImGui::SetWindowFontScale(1.0);
-            ImGui::TextColored(ImVec4(1, 1, 1, 1), std::to_string(io.Framerate).c_str());
 
+            ImGui::SetWindowFontScale(1.0);
             ImPlotFlags plotFlags = ImPlotFlags_CanvasOnly;
             ImPlotAxisFlags plotAxisFlags = ImPlotAxisFlags_NoDecorations;
             // plotAxisFlags ^= ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickLabels;
@@ -278,8 +316,8 @@ int gui()
                 ImPlot::SetupAxisLimits(ImAxis_Y1, -0.2, 0.2);
                 
                 // TODO: get 
-                ImPlot::PlotLine("My Line Plot", xDisplay, displayData, displayBufferCount*samplesPerBuffer);
-                // ImPlot::PlotLine("My Line Plot", xRead, readData, ringBufferCount*samplesPerBuffer);
+                ImPlot::PlotLine("My Line Plot", xDisplay, displayData, settings.displayBufferCount*settings.samplesPerBuffer);
+                // ImPlot::PlotLine("My Line Plot", xRead, readData, settings.ringBufferCount*settings.samplesPerBuffer);
 
                 ImPlot::EndPlot();
             }
@@ -292,7 +330,7 @@ int gui()
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
         glViewport(0, 0, display_w, display_h);
-        glClearColor(state.clear_color.x * state.clear_color.w, state.clear_color.y * state.clear_color.w, state.clear_color.z * state.clear_color.w, state.clear_color.w);
+        // glClearColor(0, 0, 0, 1);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -317,14 +355,26 @@ int gui()
     ImGui::DestroyContext();
 
     // dealloc vertex arrays/buffers
-
     glfwDestroyWindow(window);
     glfwTerminate();
+
+    paErr = Pa_CloseStream(stream);
+    if(paErr != paNoError) return pa_error_handler(paErr);
+
+    if(paCtx.rBuffFromRTData) PaUtil_FreeMemory(paCtx.rBuffFromRTData);
+    if(readData) PaUtil_FreeMemory(readData);
+    if(displayData) PaUtil_FreeMemory(displayData);
+    if(tmpData) PaUtil_FreeMemory(tmpData);
 
     paErr = Pa_Terminate();
     if(paErr != paNoError){
         printf("PortAudio termination error: %s\n", Pa_GetErrorText(paErr));
     }
+
+    computeCtx.run = false;
+    if(computeCtx.rBuffFromGuiData) PaUtil_FreeMemory(computeCtx.rBuffFromGuiData);
+    if(computeCtx.rBuffToGuiData) PaUtil_FreeMemory(computeCtx.rBuffToGuiData);
+    computeThread.join();
 
     return 0;
 }
