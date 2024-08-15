@@ -26,16 +26,21 @@
 </h4>
 
 ## C++ Edition
-`chordy-cpp` re-implements its ancestor `chordy-py` for performance in C++. Within an audio callback thread, `chordy-cpp` streams input buffers via PortAudio into a single producer, single consumer, thread-safe, lock-free circular queue (ring buffer). Using ImGui (OpenGL3 + GLFW3), the main thread of `chordy-cpp` displays a real-time waveform view, dispatching compute jobs, via ring buffer, to a separate compute thread. Using KissFFT, this thread efficiently computes the Fast-Fourier Transform and Harmonic Product Sum, relayed to the main thread for real-time display. Computing the pitch chroma, we use chord templates to estimate chord probabilities. Unlike `chordy-py`, `chordy-cpp` supports real-time settings modification. The gui of `chordy-cpp` ticks at ~46.3fps (21.6 ms/f), while the compute thread processes jobs at ~22.3ms (45 jobs/s). `chordy-py` is ~2x faster than `chordy-py`. 
+`chordy-cpp` re-implements its ancestor `chordy-py` for performance in C++, maintaining a three thread structure to prevent audio buffer starvation and UI lag.
+- **Audio Callback Thread:** Uses PortAudio to stream input buffers into a single producer, single consumer, thread-safe, lock-free circular queue (ring buffer).
+- **Main Thread:** Collects frames from the audio ring buffer, dispatching compute jobs via ring buffer and displaying waveform data / compute results via ImGui (OpenGL3 + GLFW3).
+- **Compute Thread:** Uses KissFFT to compute the Fast-Fourier Transform of the real signal. Computing the pitch chroma, we use chord templates to estimate chord probabilities, and we also provide the Harmonic Product Spectrum for display.
+
+Unlike `chordy-py`, `chordy-cpp` supports real-time settings modification. The gui of `chordy-cpp` ticks at ~46.3fps (21.6 ms/f), while the compute thread processes jobs at ~22.3ms (45 jobs/s). `chordy-py` is ~2x faster than `chordy-py`. 
 
 ### Usage
 `chordy-cpp` is distributed as a single executable available at `/cpp/chordy`. For a source build using CMake, run `./build.sh` in `/cpp`. 
 
 ## Python Edition 
 `chordy-py` maintains three threads to isolate audio streaming, chord recognition, and GUI rendering, with dequeues for data management.
-- Chordy uses `pyaudio` to stream microphone audio into a queue of chunks. 
-- Chordy uses interpretable, analytic techniques instead of machine learning, building on Alexander Lerch's `pyACA` package. See `compute_chords` in `chord.py` for the implementation.
-- Chordy uses Python's default `tkinter` package for GUI rendering, as well as `scipy` for timeseries resampling. 
+- `chordy-py` uses `pyaudio` to stream microphone audio into a queue of chunks. 
+- `chordy-py` uses interpretable, analytic techniques instead of machine learning, building on Alexander Lerch's `pyACA` package. See `compute_chords` in `chord.py` for the implementation.
+- `chordy-py` uses Python's default `tkinter` package for GUI rendering, as well as `scipy` for timeseries resampling. 
 
 The GUI application ticks at ~23.7fps (42.1 ms/f), while the chord detection itself takes ~6.7ms (~149 per sec). 
 
