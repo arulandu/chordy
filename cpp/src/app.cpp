@@ -34,6 +34,9 @@
 #include "../libs/emscripten/emscripten_mainloop_stub.h"
 #endif
 
+ImVec4 alpha(ImVec4 c, float a) {
+    return ImVec4(c.x, c.y, c.z, a);
+}
 
 struct GuiState { 
     std::string chordName = "C#";
@@ -296,6 +299,7 @@ int gui()
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        const ImVec4 accentCol1 = ImColor::HSV(219/360., .58, .93), accentCol2 = ImColor::HSV(99/360., .58, .93), accentCol3 = ImColor::HSV(349/360., .58, .93);
         // Main Window
         {
             ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -304,7 +308,7 @@ int gui()
             
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
 
-            ImGui::Begin("Main", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize);
+            ImGui::Begin("Main", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
             auto winSize = ImGui::GetWindowSize();
 
@@ -323,7 +327,7 @@ int gui()
                 for(int p = 0; p < 12; p++) {
                     ImGui::SetCursorPosX((winSize.x-total)*0.5f+run);
                     ImGui::SetCursorPosY(notesY);
-                    ImGui::TextColored(ImVec4(100/255., 149/255., 237/255., chordComputeData->chroma[p]), notes[p].c_str());
+                    ImGui::TextColored(alpha(accentCol1, chordComputeData->chroma[p]), notes[p].c_str());
                     run += ImGui::CalcTextSize(notes[p].c_str()).x+spacing;
                 }
             }
@@ -343,14 +347,18 @@ int gui()
             float plotHPSHeight = 0.1f;
             float plotWaveHeight = 0.1f;
             
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(5, 5));
             ImGui::SetCursorPosY(winSize.y*(1-plotSpecHeight-plotWaveHeight-plotHPSHeight));
-
             ImPlot::SetNextAxesLimits(-settings.displayBufferCount*(long)settings.samplesPerBuffer*1.f/settings.sampleRate, 0, -state.plotMxs[0], state.plotMxs[0], ImPlotCond_Always); 
             if (ImPlot::BeginPlot("Waveform", ImVec2(-1, winSize.y*plotWaveHeight), plotFlags)) { 
                 ImPlot::SetupAxes("Time", "Amplitude", plotAxisFlags, plotAxisFlags);
-                ImPlot::SetNextLineStyle(ImColor(100, 149, 237, 255));
+                ImPlot::SetNextLineStyle(accentCol1);
                 ImPlot::PlotLine("Audio", xDisplay, displayData, settings.displayBufferCount*settings.samplesPerBuffer);
                 ImPlot::EndPlot();
+            }
+            if(ImGui::BeginItemTooltip()) {
+                ImGui::SetTooltip("Audio Signal (Time Domain)");
+                ImGui::EndTooltip();
             }
             
             if(chordComputeData) {
@@ -361,20 +369,29 @@ int gui()
                 ImPlot::SetNextAxesLimits(0, maxDisplayHz, 0, exp2(state.plotMxs[1]), ImPlotCond_Always); 
                 if (ImPlot::BeginPlot("Spectra", ImVec2(-1, winSize.y*plotSpecHeight), plotFlags)) {
                     ImPlot::SetupAxes("Frequency", "Power", plotAxisFlags, plotAxisFlags);
-                    ImPlot::SetNextLineStyle(ImColor(100, 237, 118, 255));
+                    ImPlot::SetNextLineStyle(accentCol2);
                     ImPlot::PlotLine("Spectra", xSpec, chordComputeData->spec, settings.computeBufferCount*settings.samplesPerBuffer*maxDisplayHz/settings.sampleRate);
                     ImPlot::EndPlot();
                 }
-
+                if(ImGui::BeginItemTooltip()) {
+                    ImGui::SetTooltip("Power Spectrum (Frequency Domain)");
+                    ImGui::EndTooltip();
+                }
+                
                 ImGui::SetCursorPosY(winSize.y*(1-plotHPSHeight));
                 ImPlot::SetNextAxesLimits(0, maxDisplayHz, 0, exp2(state.plotMxs[2]), ImPlotCond_Always); 
                 if (ImPlot::BeginPlot("HPS", ImVec2(-1, winSize.y*plotHPSHeight), plotFlags)) {
                     ImPlot::SetupAxes("Frequency", "HPS", plotAxisFlags^ImPlotAxisFlags_NoTickLabels, plotAxisFlags);
-                    ImPlot::SetNextLineStyle(ImColor(237, 109, 100, 255));
+                    ImPlot::SetNextLineStyle(accentCol3);
                     ImPlot::PlotLine("HPS", xSpec, chordComputeData->hps, settings.computeBufferCount*settings.samplesPerBuffer*maxDisplayHz/settings.sampleRate);
                     ImPlot::EndPlot();
                 }
+                if(ImGui::BeginItemTooltip()) {
+                    ImGui::SetTooltip("Harmonic Product Spectrum (Frequency Domain)");
+                    ImGui::EndTooltip();
+                }
             }
+            ImGui::PopStyleVar();
 
             ImGui::End();
             ImGui::PopStyleVar();
@@ -398,31 +415,63 @@ int gui()
                 ImGui::PopTextWrapPos();
                 ImGui::TextLinkOpenURL("GitHub", "https://github.com/arulandu/chordy");
                 ImGui::SameLine();
-                ImGui::TextLinkOpenURL("Website", "https://github.com/arulandu/chordy");
+                ImGui::TextLinkOpenURL("Website", "https://arulandu.com");
                 ImGui::SameLine();
                 ImGui::TextColored(ImVec4(1,1,1,1), "© Alvan Arulandu");
                 ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
                 ImGui::TextColored(ImVec4(1, 1, 1, 1), "Main:    %.2f fps", io.Framerate);
-                if(chordComputeData) ImGui::TextColored(ImVec4(1, 1, 1, 1), "Compute: %.2f fps", 1000./chordComputeData->dt);
+                if(chordComputeData){ 
+                    ImGui::TextColored(ImVec4(1, 1, 1, 1), "Compute: %.2f fps", 1000./chordComputeData->dt);
+                }
                 ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
                 
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(1, 1, 1, .1));                
+                ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(1, 1, 1, .2));                
+                ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(1, 1, 1, .3));                
+                ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(1, 1, 1, .4));                
+                ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(1, 1, 1, .6));                
                 ImGui::TextColored(ImVec4(1, 1, 1, 1), "Octaves");
+                if(ImGui::BeginItemTooltip()) {
+                    ImGui::SetTooltip("octaves for HPS/chroma calculation.");
+                    ImGui::EndTooltip();
+                }
                 if(ImGui::SliderInt("##1", &state.octaves, 1, 8, "%d", ImGuiSliderFlags_NoInput|ImGuiSliderFlags_AlwaysClamp)){
                     settings.octaves = state.octaves;
                 }
                 ImGui::Spacing();
-                
+
                 ImGui::TextColored(ImVec4(1, 1, 1, 1), "Threshold");
+                if(ImGui::BeginItemTooltip()) {
+                    ImGui::SetTooltip("N/A threshold for chord/avg ratio.");
+                    ImGui::EndTooltip();
+                }
                 if(ImGui::SliderFloat("##2", &state.threshold, 1, 4, "%.3f", ImGuiSliderFlags_NoInput|ImGuiSliderFlags_AlwaysClamp)){
                     settings.threshold = state.threshold;
                 }
                 ImGui::Spacing();
 
                 ImGui::TextColored(ImVec4(1, 1, 1, 1), "Display Maximum");
+                if(ImGui::BeginItemTooltip()) {
+                    ImGui::SetTooltip("Maximum for the y-axis of each plot.");
+                    ImGui::EndTooltip();
+                }
+                ImGui::PushStyleColor(ImGuiCol_SliderGrab, alpha(accentCol1, .4));                
+                ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, alpha(accentCol1, .6));                
+                ImGui::PushStyleColor(ImGuiCol_Text, accentCol1);                
                 ImGui::SliderFloat("Waveform", &state.plotMxs[0], 0, 2, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-                ImGui::SliderFloat("Spectrum", &state.plotMxs[1], 0, 20, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+                ImGui::PushStyleColor(ImGuiCol_SliderGrab, alpha(accentCol2, .4));                
+                ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, alpha(accentCol2, .6));                
+                ImGui::PushStyleColor(ImGuiCol_Text, accentCol2);                
+                ImGui::SliderFloat("log(power)", &state.plotMxs[1], 0, 20, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+                ImGui::PushStyleColor(ImGuiCol_SliderGrab, alpha(accentCol3, .4));                
+                ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, alpha(accentCol3, .6));                
+                ImGui::PushStyleColor(ImGuiCol_Text, accentCol3);                
                 ImGui::SliderFloat("log2(hps)", &state.plotMxs[2], 0, 51, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+                ImGui::PopStyleColor(14);
             }
             ImGui::End();
         }

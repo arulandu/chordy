@@ -26,12 +26,12 @@
 </h4>
 
 ## C++ Edition
-`chordy-cpp` re-implements its ancestor `chordy-py` for performance in C++, maintaining a three thread structure to prevent audio buffer starvation and UI lag.
+`chordy-cpp` re-implements its ancestor `chordy-py` for performance (~2x faster) in C++, maintaining a three thread structure to prevent audio buffer starvation and UI lag.
 - **Audio Callback Thread:** Uses PortAudio to stream input buffers into a single producer, single consumer, thread-safe, lock-free circular queue (ring buffer).
 - **Main Thread:** Collects frames from the audio ring buffer, dispatching compute jobs via ring buffer and displaying waveform data / compute results via ImGui (OpenGL3 + GLFW3).
 - **Compute Thread:** Uses KissFFT to compute the Fast-Fourier Transform of the real signal. Computing the pitch chroma, we use chord templates to estimate chord probabilities, and we also provide the Harmonic Product Spectrum for display.
 
-Unlike `chordy-py`, `chordy-cpp` supports real-time settings modification. The gui of `chordy-cpp` ticks at ~46.3fps (21.6 ms/f), while the compute thread processes jobs at ~22.3ms (45 jobs/s). `chordy-py` is ~2x faster than `chordy-py`. 
+Unlike `chordy-py`, `chordy-cpp` supports real-time settings modification. The gui of `chordy-cpp` ticks at ~46.3fps (21.6 ms/f), while the compute thread processes jobs at ~22.3ms (45 jobs/s). Memory consumption is ~230 MB on default settings. 
 
 ### Usage
 `chordy-cpp` is distributed as a single executable available at `/cpp/chordy`. For a source build using CMake, run `./build.sh` in `/cpp`. 
