@@ -81,22 +81,28 @@ struct Settings {
     int displayBufferCount = (displaySamples/samplesPerBuffer) + (displaySamples % samplesPerBuffer == 0 ? 0 : 1);
     int computeBufferCount = 8; // must be < displayBufferCount
     int computeRingFrameCount = 2; // choose small, even 1 tbh
+    int harmonics = 4;
 };
 
 void compute(Settings &settings, ComputeContext &ctx){
     int n = settings.samplesPerBuffer*settings.computeBufferCount;
     float* readData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*n*settings.computeRingFrameCount);
-    ChordConfig cfg = initChordConfig(n, settings.sampleRate);
-
+    ChordConfig cfg = initChordConfig(n, settings.sampleRate, settings.harmonics);
+    auto st = std::chrono::high_resolution_clock::now();
+    auto end = st;
+    double dt = 0;
     while(ctx.run) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(300));
         int available = PaUtil_GetRingBufferReadAvailable(&ctx.rBuffFromGui);
         if(available > 0){
             PaUtil_ReadRingBuffer(&ctx.rBuffFromGui, readData, available);
             float* samples = &readData[n*(available-1)];
             ChordComputeData* pt = initChordComputeData(n); 
+            pt->dt = dt;
             computeChord(*pt, samples, cfg);
             PaUtil_WriteRingBuffer(&ctx.rBuffToGui, &pt, 1);
+            end = std::chrono::high_resolution_clock::now();
+            dt = std::chrono::duration<double, std::milli>(end-st).count(); // ms 
+            st = end;
         }
     }
 
@@ -187,11 +193,11 @@ int gui()
     float* displayData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*settings.displayBufferCount*settings.samplesPerBuffer);
     float* tmpData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*settings.displayBufferCount*settings.samplesPerBuffer);
     int displayWriteInd = 0;
-    
-    float xDisplay[settings.samplesPerBuffer*settings.displayBufferCount], xRead[settings.samplesPerBuffer*settings.ringBufferCount];
+    float xDisplay[settings.samplesPerBuffer*settings.displayBufferCount], xRead[settings.samplesPerBuffer*settings.ringBufferCount], xSpec[settings.samplesPerBuffer*settings.computeBufferCount];
     for(int i = 0; i < settings.samplesPerBuffer*settings.displayBufferCount; i++){
-        xDisplay[i] = i;
-        if(i < settings.samplesPerBuffer*settings.ringBufferCount) xRead[i] = i;
+        xDisplay[i] = (i-settings.displayBufferCount*(long)settings.samplesPerBuffer)*1.f/settings.sampleRate;
+        if(i < settings.samplesPerBuffer*settings.ringBufferCount) xRead[i] = xDisplay[i];
+        if(i < settings.samplesPerBuffer*settings.computeBufferCount) xSpec[i] = i*settings.sampleRate*1.f/(settings.samplesPerBuffer*settings.computeBufferCount*1.f);
     }
 
     PaStreamParameters inputParams;
@@ -211,6 +217,7 @@ int gui()
 
     // initialize compute thread
     ComputeContext computeCtx;
+    ChordComputeData* chordComputeData;
     computeCtx.rBuffFromGuiData = PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*settings.samplesPerBuffer*settings.computeBufferCount*settings.computeRingFrameCount);
     PaUtil_InitializeRingBuffer(&computeCtx.rBuffFromGui, sizeof(float32_t)*settings.samplesPerBuffer*settings.computeBufferCount, settings.computeRingFrameCount, computeCtx.rBuffFromGuiData);
     computeCtx.rBuffToGuiData = PaUtil_AllocateZeroInitializedMemory(sizeof(ChordComputeData*)*settings.computeRingFrameCount);
@@ -262,10 +269,9 @@ int gui()
         
         available = PaUtil_GetRingBufferReadAvailable(&computeCtx.rBuffToGui);
         if(available > 0) {
-            ChordComputeData* data;
-            while(available--) PaUtil_ReadRingBuffer(&computeCtx.rBuffToGui, &data, 1); // TODO: Optimize
-            state.chordName = data->name;
-            freeChordComputeData(data);
+            if(chordComputeData) freeChordComputeData(chordComputeData);
+            while(available--) PaUtil_ReadRingBuffer(&computeCtx.rBuffToGui, &chordComputeData, 1); // TODO: Optimize
+            state.chordName = chordComputeData->name;
         }
 
         glfwPollEvents();
@@ -292,7 +298,8 @@ int gui()
 
             auto winSize = ImGui::GetWindowSize();
 
-            ImGui::TextColored(ImVec4(1, 1, 1, 1), std::to_string(io.Framerate).c_str());
+            ImGui::TextColored(ImVec4(1, 1, 1, 1), ("Gui:     "+std::to_string(io.Framerate) + " fps").c_str());
+            if(chordComputeData) ImGui::TextColored(ImVec4(1, 1, 1, 1), ("Compute: " + std::to_string(1000./chordComputeData->dt)+ " fps").c_str());
 
             ImGui::SetWindowFontScale(4.0);
             ImGui::SetCursorPosX((winSize.x - ImGui::CalcTextSize(state.chordName.c_str()).x)*0.5f);
@@ -301,28 +308,49 @@ int gui()
 
             ImGui::SetWindowFontScale(1.0);
             ImPlotFlags plotFlags = ImPlotFlags_CanvasOnly;
-            ImPlotAxisFlags plotAxisFlags = ImPlotAxisFlags_NoDecorations;
+            ImPlotAxisFlags plotAxisFlags = ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_NoHighlight | ImPlotAxisFlags_Lock;
             // plotAxisFlags ^= ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickLabels;
             ImPlotStyle& plotStyle = ImPlot::GetStyle();
-            plotStyle.Colors[ImPlotCol_FrameBg] = ImVec4(1, 1, 1, 0.02);
+            plotStyle.Colors[ImPlotCol_FrameBg] = ImVec4(1, 1, 1, 0);
             plotStyle.Colors[ImPlotCol_PlotBg] = ImVec4(0, 1, 0, 0);
             plotStyle.Colors[ImPlotCol_PlotBorder] = ImVec4(1, 1, 1, 0);
             plotStyle.PlotPadding = ImVec2(0,5);
 
-            float plotHeightPercent = 0.5f;
-            ImGui::SetCursorPosY(winSize.y*(1-plotHeightPercent));
-            if (ImPlot::BeginPlot("Waveform", ImVec2(-1, winSize.y*plotHeightPercent), plotFlags)) {
+            float plotSpecHeight = 0.1f;
+            float plotHPSHeight = 0.1f;
+            float plotWaveHeight = 0.1f;
+            
+            ImGui::SetCursorPosY(winSize.y*(1-plotSpecHeight-plotWaveHeight-plotHPSHeight));
+            if (ImPlot::BeginPlot("Waveform", ImVec2(-1, winSize.y*plotWaveHeight), plotFlags)) {
+                ImPlot::SetupAxesLimits(-settings.displayBufferCount*(long)settings.samplesPerBuffer*1.f/settings.sampleRate, 0, -0.2, 0.2); 
                 ImPlot::SetupAxes("Time", "Amplitude", plotAxisFlags, plotAxisFlags);
-                // ImPlot::SetupAxesLimits(0, 3, -0.12, 0.12);
-                ImPlot::SetupAxisLimits(ImAxis_Y1, -0.2, 0.2);
-                
-                // TODO: get 
-                ImPlot::PlotLine("My Line Plot", xDisplay, displayData, settings.displayBufferCount*settings.samplesPerBuffer);
-                // ImPlot::PlotLine("My Line Plot", xRead, readData, settings.ringBufferCount*settings.samplesPerBuffer);
-
+                ImPlot::SetNextLineStyle(ImColor(100, 149, 237, 255));
+                ImPlot::PlotLine("Audio", xDisplay, displayData, settings.displayBufferCount*settings.samplesPerBuffer);
                 ImPlot::EndPlot();
             }
             
+            if(chordComputeData) {
+                // plot first 1000hz of spectra
+                const float maxDisplayHz = 1100;
+                ImGui::SetCursorPosY(winSize.y*(1-plotSpecHeight-plotHPSHeight));
+                if (ImPlot::BeginPlot("Spectra", ImVec2(-1, winSize.y*plotSpecHeight), plotFlags)) {
+                    ImPlot::SetupAxesLimits(0, maxDisplayHz, 0, 400); 
+                    ImPlot::SetupAxes("Frequency", "Power", plotAxisFlags, plotAxisFlags);
+                    ImPlot::SetNextLineStyle(ImColor(100, 237, 118, 255));
+                    ImPlot::PlotLine("Spectra", xSpec, chordComputeData->spec, settings.computeBufferCount*settings.samplesPerBuffer*maxDisplayHz/settings.sampleRate);
+                    ImPlot::EndPlot();
+                }
+
+                ImGui::SetCursorPosY(winSize.y*(1-plotHPSHeight));
+                if (ImPlot::BeginPlot("HPS", ImVec2(-1, winSize.y*plotHPSHeight), plotFlags)) {
+                    ImPlot::SetupAxesLimits(0, maxDisplayHz, 0, pow(400, settings.harmonics/2)); 
+                    ImPlot::SetupAxes("Frequency", "HPS", plotAxisFlags^ImPlotAxisFlags_NoTickLabels, plotAxisFlags);
+                    ImPlot::SetNextLineStyle(ImColor(237, 109, 100, 255));
+                    ImPlot::PlotLine("HPS", xSpec, chordComputeData->hps, settings.computeBufferCount*settings.samplesPerBuffer*maxDisplayHz/settings.sampleRate);
+                    ImPlot::EndPlot();
+                }
+            }
+
             ImGui::End();
         }
 
@@ -373,6 +401,7 @@ int gui()
     }
 
     computeCtx.run = false;
+    if(chordComputeData) freeChordComputeData(chordComputeData);
     if(computeCtx.rBuffFromGuiData) PaUtil_FreeMemory(computeCtx.rBuffFromGuiData);
     if(computeCtx.rBuffToGuiData) PaUtil_FreeMemory(computeCtx.rBuffToGuiData);
     computeThread.join();
