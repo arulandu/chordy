@@ -5,7 +5,7 @@ const std::string notes[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", 
 
 struct ChordConfig {
     int n;
-    int R;
+    int octaves;
     float sampleRate;
     kiss_fftr_cfg cfg;
     // kiss_fft_scalar *in;
@@ -22,6 +22,6 @@ struct ChordComputeData {
 
 ChordComputeData* initChordComputeData(int n);
 void freeChordComputeData(ChordComputeData* x);
-ChordConfig initChordConfig(int n, float sampleRate, int R);
+ChordConfig initChordConfig(int n, float sampleRate, int octaves);
 void freeChordConfig(ChordConfig& cfg);
 void computeChord(ChordComputeData& out, float* samples, ChordConfig& cfg);

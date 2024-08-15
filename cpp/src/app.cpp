@@ -37,6 +37,10 @@
 
 struct GuiState { 
     std::string chordName = "C#";
+    const float mainDisplayRatio = 0.8f;
+    bool collapsed = false;
+    int octaves = 4;
+    float plotMxs[3] = {0.2, 14.87, 17.3};
 };
 
 struct PaContext {
@@ -81,13 +85,13 @@ struct Settings {
     int displayBufferCount = (displaySamples/samplesPerBuffer) + (displaySamples % samplesPerBuffer == 0 ? 0 : 1);
     int computeBufferCount = 8; // must be < displayBufferCount
     int computeRingFrameCount = 2; // choose small, even 1 tbh
-    int harmonics = 4;
+    int octaves = 4;
 };
 
 void compute(Settings &settings, ComputeContext &ctx){
     int n = settings.samplesPerBuffer*settings.computeBufferCount;
     float* readData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*n*settings.computeRingFrameCount);
-    ChordConfig cfg = initChordConfig(n, settings.sampleRate, settings.harmonics);
+    ChordConfig cfg = initChordConfig(n, settings.sampleRate, settings.octaves);
     auto st = std::chrono::high_resolution_clock::now();
     auto end = st;
     double dt = 0;
@@ -98,6 +102,8 @@ void compute(Settings &settings, ComputeContext &ctx){
             float* samples = &readData[n*(available-1)];
             ChordComputeData* pt = initChordComputeData(n); 
             pt->dt = dt;
+
+            cfg.octaves = settings.octaves;
             computeChord(*pt, samples, cfg);
             PaUtil_WriteRingBuffer(&ctx.rBuffToGui, &pt, 1);
             end = std::chrono::high_resolution_clock::now();
@@ -225,6 +231,8 @@ int gui()
     std::thread computeThread(compute, std::ref(settings), std::ref(computeCtx));
 
     // TODO: load fonts (see imgui docs)
+
+        
     // state 
     GuiState state;
     // Main loop
@@ -288,20 +296,17 @@ int gui()
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        // Main Window
         {
             ImGuiViewport* viewport = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(viewport->WorkPos); 
-            ImGui::SetNextWindowSize(viewport->WorkSize);
+            ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x*(state.collapsed ? 1. : state.mainDisplayRatio), viewport->WorkSize.y));
             
-            ImGuiStyle& style = ImGui::GetStyle();
-            style.WindowPadding = ImVec2(0, 0);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
 
             ImGui::Begin("Main", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize);
 
             auto winSize = ImGui::GetWindowSize();
-
-            ImGui::TextColored(ImVec4(1, 1, 1, 1), ("Gui:     "+std::to_string(io.Framerate) + " fps").c_str());
-            if(chordComputeData) ImGui::TextColored(ImVec4(1, 1, 1, 1), ("Compute: " + std::to_string(1000./chordComputeData->dt)+ " fps").c_str());
 
             ImGui::SetWindowFontScale(4.0);
             ImGui::SetCursorPosX((winSize.x - ImGui::CalcTextSize(state.chordName.c_str()).x)*0.5f);
@@ -326,8 +331,8 @@ int gui()
             ImGui::SetWindowFontScale(1.0);
 
             ImPlotFlags plotFlags = ImPlotFlags_CanvasOnly;
-            ImPlotAxisFlags plotAxisFlags = ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_NoHighlight | ImPlotAxisFlags_Lock;
-            // plotAxisFlags ^= ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickLabels;
+            ImPlotAxisFlags plotAxisFlags = ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_NoHighlight;
+            //    plotAxisFlags ^= ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickLabels;
             ImPlotStyle& plotStyle = ImPlot::GetStyle();
             plotStyle.Colors[ImPlotCol_FrameBg] = ImVec4(1, 1, 1, 0);
             plotStyle.Colors[ImPlotCol_PlotBg] = ImVec4(0, 1, 0, 0);
@@ -339,8 +344,9 @@ int gui()
             float plotWaveHeight = 0.1f;
             
             ImGui::SetCursorPosY(winSize.y*(1-plotSpecHeight-plotWaveHeight-plotHPSHeight));
-            if (ImPlot::BeginPlot("Waveform", ImVec2(-1, winSize.y*plotWaveHeight), plotFlags)) {
-                ImPlot::SetupAxesLimits(-settings.displayBufferCount*(long)settings.samplesPerBuffer*1.f/settings.sampleRate, 0, -0.2, 0.2); 
+
+            ImPlot::SetNextAxesLimits(-settings.displayBufferCount*(long)settings.samplesPerBuffer*1.f/settings.sampleRate, 0, -state.plotMxs[0], state.plotMxs[0], ImPlotCond_Always); 
+            if (ImPlot::BeginPlot("Waveform", ImVec2(-1, winSize.y*plotWaveHeight), plotFlags)) { 
                 ImPlot::SetupAxes("Time", "Amplitude", plotAxisFlags, plotAxisFlags);
                 ImPlot::SetNextLineStyle(ImColor(100, 149, 237, 255));
                 ImPlot::PlotLine("Audio", xDisplay, displayData, settings.displayBufferCount*settings.samplesPerBuffer);
@@ -351,8 +357,9 @@ int gui()
                 // plot first 1000hz of spectra
                 const float maxDisplayHz = 1100;
                 ImGui::SetCursorPosY(winSize.y*(1-plotSpecHeight-plotHPSHeight));
+                
+                ImPlot::SetNextAxesLimits(0, maxDisplayHz, 0, exp2(state.plotMxs[1]), ImPlotCond_Always); 
                 if (ImPlot::BeginPlot("Spectra", ImVec2(-1, winSize.y*plotSpecHeight), plotFlags)) {
-                    ImPlot::SetupAxesLimits(0, maxDisplayHz, 0, 30000); 
                     ImPlot::SetupAxes("Frequency", "Power", plotAxisFlags, plotAxisFlags);
                     ImPlot::SetNextLineStyle(ImColor(100, 237, 118, 255));
                     ImPlot::PlotLine("Spectra", xSpec, chordComputeData->spec, settings.computeBufferCount*settings.samplesPerBuffer*maxDisplayHz/settings.sampleRate);
@@ -360,8 +367,8 @@ int gui()
                 }
 
                 ImGui::SetCursorPosY(winSize.y*(1-plotHPSHeight));
+                ImPlot::SetNextAxesLimits(0, maxDisplayHz, 0, exp2(state.plotMxs[2]), ImPlotCond_Always); 
                 if (ImPlot::BeginPlot("HPS", ImVec2(-1, winSize.y*plotHPSHeight), plotFlags)) {
-                    ImPlot::SetupAxesLimits(0, maxDisplayHz, 0, pow(400, settings.harmonics/2)); 
                     ImPlot::SetupAxes("Frequency", "HPS", plotAxisFlags^ImPlotAxisFlags_NoTickLabels, plotAxisFlags);
                     ImPlot::SetNextLineStyle(ImColor(237, 109, 100, 255));
                     ImPlot::PlotLine("HPS", xSpec, chordComputeData->hps, settings.computeBufferCount*settings.samplesPerBuffer*maxDisplayHz/settings.sampleRate);
@@ -370,7 +377,52 @@ int gui()
             }
 
             ImGui::End();
+            ImGui::PopStyleVar();
         }
+
+        // Settings Window
+        {
+            ImGuiViewport* viewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x+viewport->WorkSize.x*state.mainDisplayRatio, viewport->WorkPos.y)); 
+            ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x*(1-state.mainDisplayRatio), viewport->WorkSize.y));
+
+            // ImGuiStyle& style = ImGui::GetStyle();
+            // style.WindowPadding = ImVec2(0, 0);
+
+            state.collapsed = !ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove);
+            if(!state.collapsed) {
+                auto winSize = ImGui::GetWindowSize();
+
+                ImGui::PushTextWrapPos(winSize.x);
+                ImGui::TextColored(ImVec4(1,1,1,1), "Chordy v1.0.0\nA configurable, multi-threaded, real-time chord detector in C++.");
+                ImGui::PopTextWrapPos();
+                ImGui::TextLinkOpenURL("GitHub", "https://github.com/arulandu/chordy");
+                ImGui::SameLine();
+                ImGui::TextLinkOpenURL("Website", "https://github.com/arulandu/chordy");
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1,1,1,1), "© Alvan Arulandu");
+                ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
+
+                ImGui::TextColored(ImVec4(1, 1, 1, 1), "Main:    %.2f fps", io.Framerate);
+                if(chordComputeData) ImGui::TextColored(ImVec4(1, 1, 1, 1), "Compute: %.2f fps", 1000./chordComputeData->dt);
+                ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
+                
+                ImGui::TextColored(ImVec4(1, 1, 1, 1), "Octaves");
+                if(ImGui::SliderInt("##", &state.octaves, 1, 8, "%d", ImGuiSliderFlags_NoInput|ImGuiSliderFlags_AlwaysClamp)){
+                    settings.octaves = state.octaves;
+                }
+                ImGui::Spacing();
+                
+                ImGui::TextColored(ImVec4(1, 1, 1, 1), "Display Maximum");
+                ImGui::SliderFloat("Waveform", &state.plotMxs[0], 0, 2, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                ImGui::SliderFloat("Spectrum", &state.plotMxs[1], 0, 20, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+                ImGui::SliderFloat("log2(hps)", &state.plotMxs[2], 0, 51, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            }
+            ImGui::End();
+        }
+
+
+        // ImGui::ShowDemoWindow();
 
         // Rendering
         ImGui::Render();

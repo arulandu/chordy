@@ -19,9 +19,9 @@ void freeChordComputeData(ChordComputeData* x) {
     delete x;
 }
 
-ChordConfig initChordConfig(int n, float sampleRate, int R) {
+ChordConfig initChordConfig(int n, float sampleRate, int octaves) {
     ChordConfig cfg;
-    cfg.R = R;
+    cfg.octaves = octaves;
     cfg.n = n;
     cfg.sampleRate = sampleRate;
     cfg.cfg = kiss_fftr_alloc(n, 0, nullptr, nullptr);
@@ -66,7 +66,7 @@ void computeChord(ChordComputeData& out, float* samples, ChordConfig& cfg) {
 
     for(int i = 3; i < cfg.n/2; i++){ // set first 3 bins to 0
         out.hps[i] = 1;
-        for(int r = 1; r <= cfg.R; r++){
+        for(int r = 1; r <= cfg.octaves; r++){
             out.hps[i] *= out.spec[r*i];
         }
         out.hps[i] = sqrtf(out.hps[i]);
@@ -76,7 +76,7 @@ void computeChord(ChordComputeData& out, float* samples, ChordConfig& cfg) {
     float mid = midi2Freq(60);
     for(int p = 0; p < 12; p++) {
         float lbf = mid/qrat, ubf = mid*qrat;
-        for(int r = 0; r < cfg.R; r++){
+        for(int r = 0; r < cfg.octaves; r++){
             const int lbi = freq2Bin(lbf, cfg.sampleRate, cfg.n), ubi = freq2Bin(ubf, cfg.sampleRate, cfg.n);
             float sm = 0; for(int j = lbi; j <= ubi; j++) sm += out.spec[j];
             out.chroma[p] += sm/(ubi-lbi+1);
