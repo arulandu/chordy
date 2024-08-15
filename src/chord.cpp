@@ -8,12 +8,14 @@ ChordComputeData* initChordComputeData(int n) {
     ChordComputeData* x = (ChordComputeData*)malloc(sizeof(ChordComputeData));
     x->spec = (float*)malloc(sizeof(float)*n);
     x->hps = (float*)malloc(sizeof(float)*n);
+    x->chroma = (float*)malloc(sizeof(float)*12);
     return x;
 }
 
 void freeChordComputeData(ChordComputeData* x) {
     free(x->spec);
     free(x->hps);
+    free(x->chroma);
     delete x;
 }
 
@@ -22,23 +24,44 @@ ChordConfig initChordConfig(int n, float sampleRate, int R) {
     cfg.R = R;
     cfg.n = n;
     cfg.sampleRate = sampleRate;
-    cfg.cfg = kiss_fft_alloc(n, 0, nullptr, nullptr);
-    cfg.in = (kiss_fft_cpx*)malloc(sizeof(kiss_fft_cpx)*n);
+    cfg.cfg = kiss_fftr_alloc(n, 0, nullptr, nullptr);
     cfg.out = (kiss_fft_cpx*)malloc(sizeof(kiss_fft_cpx)*n);
     return cfg;
 }
 
 void freeChordConfig(ChordConfig& cfg) {
-    free(cfg.in); free(cfg.out); free(cfg.cfg);
+    free(cfg.out);
+    free(cfg.cfg);
 }
 
-// TODO: populate out.spec and display FFT spectra
-void computeChord(ChordComputeData& out, float* samples, ChordConfig& cfg) {
-    for(int i = 0; i < cfg.n; i++) cfg.in[i].r = samples[i];
+const bool mask[2][12] = {
+    {1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0},
+    {1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0},
+};
 
-    kiss_fft(cfg.cfg, cfg.in, cfg.out);
+std::string maskIndToName(int ind) {
+    switch (ind) {
+        case 0: return "Maj";
+        case 1: return "Min"; 
+    }
+}
+
+int freq2Midi(float freq) {
+    return std::round(12 * std::log2(freq / 440.0) + 69);
+}
+
+float midi2Freq(int midi) {
+    return std::exp2f((midi-69)/12.)*440.;
+}
+
+int freq2Bin(float freq, int sampleRate, int n) {
+    return std::floorf(freq*n/sampleRate);
+}
+
+void computeChord(ChordComputeData& out, float* samples, ChordConfig& cfg) {
+    kiss_fftr(cfg.cfg, samples, cfg.out);
     
-    for(int i = 0; i < cfg.n; i++) out.spec[i] = sqrtf(cfg.out[i].r * cfg.out[i].r + cfg.out[i].i * cfg.out[i].i);
+    for(int i = 0; i < cfg.n; i++) out.spec[i] = cfg.out[i].r * cfg.out[i].r + cfg.out[i].i * cfg.out[i].i;
     memset(out.hps, 0, sizeof(float)*cfg.n);
 
     for(int i = 3; i < cfg.n/2; i++){ // set first 3 bins to 0
@@ -46,15 +69,43 @@ void computeChord(ChordComputeData& out, float* samples, ChordConfig& cfg) {
         for(int r = 1; r <= cfg.R; r++){
             out.hps[i] *= out.spec[r*i];
         }
+        out.hps[i] = sqrtf(out.hps[i]);
     }
 
-    std::map<int, std::string> noteMap = {
-        {0, "C"}, {1, "C#"}, {2, "D"}, {3, "D#"}, {4, "E"}, {5, "F"},
-        {6, "F#"}, {7, "G"}, {8, "G#"}, {9, "A"}, {10, "A#"}, {11, "B"}
-    };
-    int mxBin = 0; for(int i = 0; i < cfg.n/2; i++) if(out.hps[i] > out.hps[mxBin]) mxBin = i;
-    float freq = mxBin * (cfg.sampleRate / cfg.n);
-    int midi = std::round(12 * std::log2(freq / 440.0) + 69);
-    out.name = noteMap[midi%12] + std::to_string((midi / 12)-1);
-    // std::cout << freq << ' ' << out.name << ' ' << out.hps[mxBin] << '\n';
+    const float qrat = 1.02930223664349F; // quarter tone ratio
+    float mid = midi2Freq(60);
+    for(int p = 0; p < 12; p++) {
+        float lbf = mid/qrat, ubf = mid*qrat;
+        for(int r = 0; r < cfg.R; r++){
+            const int lbi = freq2Bin(lbf, cfg.sampleRate, cfg.n), ubi = freq2Bin(ubf, cfg.sampleRate, cfg.n);
+            float sm = 0; for(int j = lbi; j <= ubi; j++) sm += out.spec[j];
+            out.chroma[p] += sm/(ubi-lbi+1);
+
+            lbf *= 2.F; ubf *= 2.F;
+        }
+        mid *= qrat*qrat;
+    }
+
+    float chords[2][12];
+    std::pair<int, int> mxl = {0, 0};
+    for(int i = 0; i < 2; i++) {
+        for(int p = 0; p < 12; p++) {
+            float sm = 0, c = 0;
+            for(int q = 0; q < 12; q++) {
+                sm += mask[i][q]*out.chroma[(p+q)%12];
+                c += mask[i][q];
+            }
+            chords[i][p] = sm/c;
+            if(chords[i][p] > chords[mxl.first][mxl.second]) mxl = {i, p};
+        }
+    }
+
+    float avg = 0; for(int p = 0; p < 12; p++) avg += out.chroma[p];
+    avg /= 12.;
+
+    if(chords[mxl.first][mxl.second] > avg){
+        out.name = notes[mxl.second] + " " + maskIndToName(mxl.first); 
+    } else {
+        out.name = "N/A";
+    }
 }

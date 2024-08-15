@@ -1,12 +1,15 @@
 #include <string>
-#include <kiss_fft.h>
+#include <kiss_fftr.h>
+
+const std::string notes[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 
 struct ChordConfig {
     int n;
     int R;
     float sampleRate;
-    kiss_fft_cfg cfg;
-    kiss_fft_cpx *in, *out;
+    kiss_fftr_cfg cfg;
+    // kiss_fft_scalar *in;
+    kiss_fft_cpx *out;
 };
 
 struct ChordComputeData {
@@ -14,6 +17,7 @@ struct ChordComputeData {
     float* spec;
     float* hps;
     double dt;
+    float* chroma;
 };
 
 ChordComputeData* initChordComputeData(int n);

@@ -272,6 +272,8 @@ int gui()
             if(chordComputeData) freeChordComputeData(chordComputeData);
             while(available--) PaUtil_ReadRingBuffer(&computeCtx.rBuffToGui, &chordComputeData, 1); // TODO: Optimize
             state.chordName = chordComputeData->name;
+            float sm = 0; for(int p = 0; p < 12; p++) sm += chordComputeData->chroma[p];
+            for(int p = 0; p < 12; p++) chordComputeData->chroma[p] /= sm; // convert to relative chroma
         }
 
         glfwPollEvents();
@@ -304,9 +306,25 @@ int gui()
             ImGui::SetWindowFontScale(4.0);
             ImGui::SetCursorPosX((winSize.x - ImGui::CalcTextSize(state.chordName.c_str()).x)*0.5f);
             ImGui::SetCursorPosY((winSize.y - ImGui::CalcTextSize(state.chordName.c_str()).y)*0.25f);
-            ImGui::TextColored(ImVec4(1, 1, 1, 1), state.chordName.c_str());
+            ImGui::TextColored(ImColor(100, 149, 237, 255), state.chordName.c_str());
+            const float notesY = 0.25f*winSize.y +0.75f*ImGui::CalcTextSize(state.chordName.c_str()).y + 0.025f*winSize.y;
+            
+            ImGui::SetWindowFontScale(2.0);
+            if(chordComputeData) {
+                const float spacing = 20.f;
+                float ts = 0; for(int p = 0; p < 12; p++) ts += ImGui::CalcTextSize(notes[p].c_str()).x;
+                float total = ts + spacing * 11; float run = 0;
+
+                for(int p = 0; p < 12; p++) {
+                    ImGui::SetCursorPosX((winSize.x-total)*0.5f+run);
+                    ImGui::SetCursorPosY(notesY);
+                    ImGui::TextColored(ImVec4(100/255., 149/255., 237/255., chordComputeData->chroma[p]), notes[p].c_str());
+                    run += ImGui::CalcTextSize(notes[p].c_str()).x+spacing;
+                }
+            }
 
             ImGui::SetWindowFontScale(1.0);
+
             ImPlotFlags plotFlags = ImPlotFlags_CanvasOnly;
             ImPlotAxisFlags plotAxisFlags = ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_NoHighlight | ImPlotAxisFlags_Lock;
             // plotAxisFlags ^= ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickLabels;
@@ -334,7 +352,7 @@ int gui()
                 const float maxDisplayHz = 1100;
                 ImGui::SetCursorPosY(winSize.y*(1-plotSpecHeight-plotHPSHeight));
                 if (ImPlot::BeginPlot("Spectra", ImVec2(-1, winSize.y*plotSpecHeight), plotFlags)) {
-                    ImPlot::SetupAxesLimits(0, maxDisplayHz, 0, 400); 
+                    ImPlot::SetupAxesLimits(0, maxDisplayHz, 0, 30000); 
                     ImPlot::SetupAxes("Frequency", "Power", plotAxisFlags, plotAxisFlags);
                     ImPlot::SetNextLineStyle(ImColor(100, 237, 118, 255));
                     ImPlot::PlotLine("Spectra", xSpec, chordComputeData->spec, settings.computeBufferCount*settings.samplesPerBuffer*maxDisplayHz/settings.sampleRate);
