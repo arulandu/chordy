@@ -73,10 +73,6 @@ struct ComputeContext {
     void* rBuffToGuiData;
 };
 
-struct ComputeToGuiData {
-    std::string s;
-};
-
 struct Settings {
     float sampleRate = 44100.0;
     unsigned long samplesPerBuffer = 1024;
@@ -88,20 +84,24 @@ struct Settings {
 };
 
 void compute(Settings &settings, ComputeContext &ctx){
-    float* readData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*settings.samplesPerBuffer*settings.computeBufferCount*settings.computeRingFrameCount);
+    int n = settings.samplesPerBuffer*settings.computeBufferCount;
+    float* readData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*n*settings.computeRingFrameCount);
+    ChordConfig cfg = initChordConfig(n, settings.sampleRate);
+
     while(ctx.run) {
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
         int available = PaUtil_GetRingBufferReadAvailable(&ctx.rBuffFromGui);
         if(available > 0){
             PaUtil_ReadRingBuffer(&ctx.rBuffFromGui, readData, available);
-            float* frameData = &readData[settings.samplesPerBuffer*settings.computeBufferCount*(available-1)];
-            ComputeToGuiData data; 
-            computeChord(data.s, frameData, settings.samplesPerBuffer*settings.computeBufferCount, settings.sampleRate);
-            PaUtil_WriteRingBuffer(&ctx.rBuffToGui, &data, 1);
+            float* samples = &readData[n*(available-1)];
+            ChordComputeData* pt = (ChordComputeData*) malloc(sizeof(ChordComputeData)); 
+            computeChord(*pt, samples, cfg);
+            PaUtil_WriteRingBuffer(&ctx.rBuffToGui, &pt, 1);
         }
     }
 
     if(readData) PaUtil_FreeMemory(readData);
+    freeChordConfig(cfg);
 }
 
 int gui()
@@ -213,8 +213,8 @@ int gui()
     ComputeContext computeCtx;
     computeCtx.rBuffFromGuiData = PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*settings.samplesPerBuffer*settings.computeBufferCount*settings.computeRingFrameCount);
     PaUtil_InitializeRingBuffer(&computeCtx.rBuffFromGui, sizeof(float32_t)*settings.samplesPerBuffer*settings.computeBufferCount, settings.computeRingFrameCount, computeCtx.rBuffFromGuiData);
-    computeCtx.rBuffToGuiData = PaUtil_AllocateZeroInitializedMemory(sizeof(ComputeToGuiData)*settings.computeRingFrameCount);
-    PaUtil_InitializeRingBuffer(&computeCtx.rBuffToGui, sizeof(ComputeToGuiData), settings.computeRingFrameCount, computeCtx.rBuffToGuiData);
+    computeCtx.rBuffToGuiData = PaUtil_AllocateZeroInitializedMemory(sizeof(ChordComputeData*)*settings.computeRingFrameCount);
+    PaUtil_InitializeRingBuffer(&computeCtx.rBuffToGui, sizeof(ChordComputeData*), settings.computeRingFrameCount, computeCtx.rBuffToGuiData);
     std::thread computeThread(compute, std::ref(settings), std::ref(computeCtx));
 
     // TODO: load fonts (see imgui docs)
@@ -262,9 +262,10 @@ int gui()
         
         available = PaUtil_GetRingBufferReadAvailable(&computeCtx.rBuffToGui);
         if(available > 0) {
-            ComputeToGuiData data;
+            ChordComputeData* data;
             while(available--) PaUtil_ReadRingBuffer(&computeCtx.rBuffToGui, &data, 1); // TODO: Optimize
-            state.chordName = data.s;
+            state.chordName = data->name;
+            delete data;
         }
 
         glfwPollEvents();

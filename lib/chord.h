@@ -1,3 +1,18 @@
 #include <string>
+#include <kiss_fft.h>
 
-void computeChord(std::string& s, float* samples, int n, float sampleRate);
+struct ChordConfig {
+    int n;
+    float sampleRate;
+    kiss_fft_cfg cfg;
+    kiss_fft_cpx *in, *out;
+};
+
+struct ChordComputeData {
+    std::string name;
+    float* spec;
+};
+
+ChordConfig initChordConfig(int n, float sampleRate);
+void freeChordConfig(ChordConfig& cfg);
+void computeChord(ChordComputeData& out, float* samples, ChordConfig& cfg);
