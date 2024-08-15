@@ -19,9 +19,10 @@ void freeChordComputeData(ChordComputeData* x) {
     delete x;
 }
 
-ChordConfig initChordConfig(int n, float sampleRate, int octaves) {
+ChordConfig initChordConfig(int n, float sampleRate, int octaves, float threshold) {
     ChordConfig cfg;
     cfg.octaves = octaves;
+    cfg.threshold = threshold;
     cfg.n = n;
     cfg.sampleRate = sampleRate;
     cfg.cfg = kiss_fftr_alloc(n, 0, nullptr, nullptr);
@@ -103,7 +104,7 @@ void computeChord(ChordComputeData& out, float* samples, ChordConfig& cfg) {
     float avg = 0; for(int p = 0; p < 12; p++) avg += out.chroma[p];
     avg /= 12.;
 
-    if(chords[mxl.first][mxl.second] > avg){
+    if(chords[mxl.first][mxl.second]/avg > cfg.threshold){
         out.name = notes[mxl.second] + " " + maskIndToName(mxl.first); 
     } else {
         out.name = "N/A";

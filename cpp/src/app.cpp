@@ -40,6 +40,7 @@ struct GuiState {
     const float mainDisplayRatio = 0.8f;
     bool collapsed = false;
     int octaves = 4;
+    float threshold = 3.f;
     float plotMxs[3] = {0.2, 14.87, 17.3};
 };
 
@@ -50,7 +51,6 @@ struct PaContext {
 
 int paCallback(const void* inputBuffer, void* output, unsigned long samplesPerBuffer, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags flags, void* userData) {
     PaContext* paCtx = (PaContext*) userData;
-    // printf("callback %f\n", timeInfo->currentTime);
 
     PaUtil_WriteRingBuffer(&paCtx->rBuffFromRT, inputBuffer, 1);
     // PaUtil_Read
@@ -86,12 +86,14 @@ struct Settings {
     int computeBufferCount = 8; // must be < displayBufferCount
     int computeRingFrameCount = 2; // choose small, even 1 tbh
     int octaves = 4;
+    float threshold = 3.f;
+    std::string version = "v1.0.0";
 };
 
 void compute(Settings &settings, ComputeContext &ctx){
     int n = settings.samplesPerBuffer*settings.computeBufferCount;
     float* readData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*n*settings.computeRingFrameCount);
-    ChordConfig cfg = initChordConfig(n, settings.sampleRate, settings.octaves);
+    ChordConfig cfg = initChordConfig(n, settings.sampleRate, settings.octaves, settings.threshold);
     auto st = std::chrono::high_resolution_clock::now();
     auto end = st;
     double dt = 0;
@@ -103,7 +105,7 @@ void compute(Settings &settings, ComputeContext &ctx){
             ChordComputeData* pt = initChordComputeData(n); 
             pt->dt = dt;
 
-            cfg.octaves = settings.octaves;
+            cfg.octaves = settings.octaves; cfg.threshold = settings.threshold;
             computeChord(*pt, samples, cfg);
             PaUtil_WriteRingBuffer(&ctx.rBuffToGui, &pt, 1);
             end = std::chrono::high_resolution_clock::now();
@@ -118,7 +120,7 @@ void compute(Settings &settings, ComputeContext &ctx){
 
 int gui()
 {
-    Settings settings;
+    Settings settings; 
 
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
@@ -148,7 +150,7 @@ int gui()
 #endif
 
     // Create window with graphics context
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "Chordy: Real-Time Chord Detection", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(1280, 720, ("Chordy: Real-Time Chord Detection ("+settings.version+")").c_str(), nullptr, nullptr);
     if (window == nullptr)
         return 1;
     glfwMakeContextCurrent(window);
@@ -234,7 +236,7 @@ int gui()
 
         
     // state 
-    GuiState state;
+    GuiState state; state.threshold = settings.threshold; state.octaves = settings.octaves;
     // Main loop
 #ifdef __EMSCRIPTEN__
     // For an Emscripten build we are disabling file-system access, so let's not attempt to do a fopen() of the imgui.ini file.
@@ -256,7 +258,6 @@ int gui()
         available *= settings.samplesPerBuffer;
 
         if(available > 0){
-            // std::cout << "Read " << available << " Ind: " << displayWriteInd;
             int countRight = settings.displayBufferCount*settings.samplesPerBuffer-displayWriteInd, countLeft = 0;
             if(available > countRight){
                 countLeft = available - countRight; // ensure that settings.displayBufferCount >= settings.ringBufferCount
@@ -271,7 +272,6 @@ int gui()
 
             memcpy(displayData, &tmpData[displayWriteInd], sizeof(float32_t)*(settings.displayBufferCount*settings.samplesPerBuffer-displayWriteInd));
             memcpy(&displayData[settings.samplesPerBuffer*settings.displayBufferCount-displayWriteInd], tmpData, sizeof(float32_t)*displayWriteInd);
-            // std::cout << " FInd: " << displayWriteInd << '\n';
             PaUtil_WriteRingBuffer(&computeCtx.rBuffFromGui, &displayData[settings.samplesPerBuffer*(settings.displayBufferCount-settings.computeBufferCount)], 1);
         }
         
@@ -394,7 +394,7 @@ int gui()
                 auto winSize = ImGui::GetWindowSize();
 
                 ImGui::PushTextWrapPos(winSize.x);
-                ImGui::TextColored(ImVec4(1,1,1,1), "Chordy v1.0.0\nA configurable, multi-threaded, real-time chord detector in C++.");
+                ImGui::TextColored(ImVec4(1,1,1,1), ("Chordy " + settings.version + "\nA configurable, multi-threaded, real-time chord detector in C++.").c_str());
                 ImGui::PopTextWrapPos();
                 ImGui::TextLinkOpenURL("GitHub", "https://github.com/arulandu/chordy");
                 ImGui::SameLine();
@@ -408,11 +408,17 @@ int gui()
                 ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
                 
                 ImGui::TextColored(ImVec4(1, 1, 1, 1), "Octaves");
-                if(ImGui::SliderInt("##", &state.octaves, 1, 8, "%d", ImGuiSliderFlags_NoInput|ImGuiSliderFlags_AlwaysClamp)){
+                if(ImGui::SliderInt("##1", &state.octaves, 1, 8, "%d", ImGuiSliderFlags_NoInput|ImGuiSliderFlags_AlwaysClamp)){
                     settings.octaves = state.octaves;
                 }
                 ImGui::Spacing();
                 
+                ImGui::TextColored(ImVec4(1, 1, 1, 1), "Threshold");
+                if(ImGui::SliderFloat("##2", &state.threshold, 1, 4, "%.3f", ImGuiSliderFlags_NoInput|ImGuiSliderFlags_AlwaysClamp)){
+                    settings.threshold = state.threshold;
+                }
+                ImGui::Spacing();
+
                 ImGui::TextColored(ImVec4(1, 1, 1, 1), "Display Maximum");
                 ImGui::SliderFloat("Waveform", &state.plotMxs[0], 0, 2, "%.3f", ImGuiSliderFlags_AlwaysClamp);
                 ImGui::SliderFloat("Spectrum", &state.plotMxs[1], 0, 20, "%.3f", ImGuiSliderFlags_AlwaysClamp);
