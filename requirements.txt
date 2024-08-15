@@ -1,0 +1,6 @@
+matplotlib==3.8.2
+numpy==1.26.3
+plotly==5.18.0
+pyACA==0.3.1
+PyAudio==0.2.14
+scipy==1.11.4
