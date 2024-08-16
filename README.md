@@ -31,6 +31,12 @@
 - **Main Thread:** Collects frames from the audio ring buffer, dispatching compute jobs via ring buffer and displaying waveform data / compute results via ImGui (OpenGL3 + GLFW3).
 - **Compute Thread:** Uses KissFFT to compute the Fast-Fourier Transform of the real signal. Computing the pitch chroma, we use chord templates to estimate chord probabilities, and we also provide the Harmonic Product Spectrum for display.
 
+<br/>
+<div align="center">
+  <img src="https://github.com/user-attachments/assets/2dcdbde8-4735-4d51-afcf-ae7d242b9374" width="480px">
+</div> 
+<br/>
+
 Unlike `chordy-py`, `chordy-cpp` supports real-time settings modification. The gui of `chordy-cpp` ticks at ~46.3fps (21.6 ms/f), while the compute thread processes jobs at ~22.3ms (45 jobs/s). Memory consumption is ~230 MB on default settings. 
 
 ### Usage
