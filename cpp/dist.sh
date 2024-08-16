@@ -1,6 +1,4 @@
-if [ ! -d ./dist ]; then
-    mkdir ./dist && mkdir ./dist/res
-fi
+test -d ./dist && rm -rf ./dist
+mkdir -p ./dist/res
 
-cp ./build/chordy ./dist && cp -R ./build/res ./dist/res
-zip dist.zip dist
+cp ./build/chordy ./dist && cp -R ./build/res ./dist/
