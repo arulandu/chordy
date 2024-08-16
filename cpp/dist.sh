@@ -3,3 +3,4 @@ if [ ! -d ./dist ]; then
 fi
 
 cp ./build/chordy ./dist && cp -R ./build/res ./dist/res
+zip dist.zip dist;
