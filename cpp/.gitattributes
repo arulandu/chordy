@@ -1,0 +1,2 @@
+src/vendor/** linguist-vendored
+include/vendor/** linguist-vendored

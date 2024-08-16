@@ -18,11 +18,11 @@ target_link_libraries(${PROJECT_NAME} glfw OpenGL::GL)
 
 # ImGui + ImPlot + KissFFT
 include_directories(
-    ./lib
-    ./lib/imgui
-    ./lib/imgui/backends
-    ./lib/implot
-    ./lib/kissfft
+    ./include
+    ./include/vendor/imgui
+    ./include/vendor/imgui/backends
+    ./include/vendor/implot
+    ./include/vendor/kissfft
 )
 
 # PortAudio
