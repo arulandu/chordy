@@ -2,8 +2,8 @@
 #include "thread"
 #include "app.h"
 
-int main(int, char**)
+int main(int argc, char* argv[])
 {
-    gui();
+    gui(argc, argv);
     return 0;
 }

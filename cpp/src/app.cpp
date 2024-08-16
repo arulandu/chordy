@@ -2,6 +2,7 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <fstream>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -121,7 +122,7 @@ void compute(Settings &settings, ComputeContext &ctx){
     freeChordConfig(cfg);
 }
 
-int gui()
+int gui(int argc, char* argv[])
 {
     Settings settings; 
 
@@ -235,9 +236,17 @@ int gui()
     PaUtil_InitializeRingBuffer(&computeCtx.rBuffToGui, sizeof(ChordComputeData*), settings.computeRingFrameCount, computeCtx.rBuffToGuiData);
     std::thread computeThread(compute, std::ref(settings), std::ref(computeCtx));
 
-    // TODO: load fonts (see imgui docs)
-
-        
+    ImFont* fontSm, *fontMd, *fontLg; 
+    auto execPath = std::filesystem::path(argv[0]).parent_path();
+    std::string fontFile = execPath / "font.ttf";
+    if(std::filesystem::exists(fontFile)) {
+        fontSm = io.Fonts->AddFontFromFileTTF(fontFile.c_str(), 16.f);
+        fontMd = io.Fonts->AddFontFromFileTTF(fontFile.c_str(), 24.f);
+        fontLg = io.Fonts->AddFontFromFileTTF(fontFile.c_str(), 48.f);
+    } else {
+        io.Fonts->AddFontDefault();
+    }
+     
     // state 
     GuiState state; state.threshold = settings.threshold; state.octaves = settings.octaves;
     // Main loop
@@ -259,7 +268,7 @@ int gui()
         auto available = PaUtil_GetRingBufferReadAvailable(&paCtx.rBuffFromRT);
         PaUtil_ReadRingBuffer(&paCtx.rBuffFromRT, (void*)readData, available);
         available *= settings.samplesPerBuffer;
-
+        
         if(available > 0){
             int countRight = settings.displayBufferCount*settings.samplesPerBuffer-displayWriteInd, countLeft = 0;
             if(available > countRight){
@@ -312,14 +321,19 @@ int gui()
 
             auto winSize = ImGui::GetWindowSize();
 
-            ImGui::SetWindowFontScale(4.0);
+            if(fontLg) ImGui::PushFont(fontLg);
+            else ImGui::SetWindowFontScale(4.0);
+
             ImGui::SetCursorPosX((winSize.x - ImGui::CalcTextSize(state.chordName.c_str()).x)*0.5f);
             ImGui::SetCursorPosY((winSize.y - ImGui::CalcTextSize(state.chordName.c_str()).y)*0.25f);
             ImGui::TextColored(ImColor(100, 149, 237, 255), state.chordName.c_str());
             const float notesY = 0.25f*winSize.y +0.75f*ImGui::CalcTextSize(state.chordName.c_str()).y + 0.025f*winSize.y;
-            
-            ImGui::SetWindowFontScale(2.0);
+
+            if(fontLg) ImGui::PopFont();
             if(chordComputeData) {
+                if(fontMd) ImGui::PushFont(fontMd);
+                else ImGui::SetWindowFontScale(2.0);
+
                 const float spacing = 20.f;
                 float ts = 0; for(int p = 0; p < 12; p++) ts += ImGui::CalcTextSize(notes[p].c_str()).x;
                 float total = ts + spacing * 11; float run = 0;
@@ -327,12 +341,14 @@ int gui()
                 for(int p = 0; p < 12; p++) {
                     ImGui::SetCursorPosX((winSize.x-total)*0.5f+run);
                     ImGui::SetCursorPosY(notesY);
-                    ImGui::TextColored(alpha(accentCol1, chordComputeData->chroma[p]), notes[p].c_str());
+                    ImGui::TextColored(alpha(accentCol1, chordComputeData->chroma[p]*0.9+0.1), notes[p].c_str());
                     run += ImGui::CalcTextSize(notes[p].c_str()).x+spacing;
                 }
+                if(fontMd) ImGui::PopFont();
             }
-
-            ImGui::SetWindowFontScale(1.0);
+                        
+            if(fontSm) ImGui::PushFont(fontSm);
+            else ImGui::SetWindowFontScale(1.0);
 
             ImPlotFlags plotFlags = ImPlotFlags_CanvasOnly;
             ImPlotAxisFlags plotAxisFlags = ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_NoHighlight;
@@ -391,6 +407,7 @@ int gui()
                     ImGui::EndTooltip();
                 }
             }
+            if(fontSm) ImGui::PopFont();
             ImGui::PopStyleVar();
 
             ImGui::End();
@@ -475,10 +492,8 @@ int gui()
             }
             ImGui::End();
         }
-
-
-        // ImGui::ShowDemoWindow();
-
+        
+        // if(fontSm) ImGui::PopFont();
         // Rendering
         ImGui::Render();
         int display_w, display_h;
@@ -501,6 +516,7 @@ int gui()
 #ifdef __EMSCRIPTEN__
     EMSCRIPTEN_MAINLOOP_END;
 #endif
+
 
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();

@@ -34,7 +34,11 @@
 Unlike `chordy-py`, `chordy-cpp` supports real-time settings modification. The gui of `chordy-cpp` ticks at ~46.3fps (21.6 ms/f), while the compute thread processes jobs at ~22.3ms (45 jobs/s). Memory consumption is ~230 MB on default settings. 
 
 ### Usage
-`chordy-cpp` is distributed as a single executable available at `/cpp/chordy`. For a source build using CMake, run `./build.sh` in `/cpp`. 
+`chordy-cpp` is distributed as a single executable available at `/cpp/chordy`. Downloading and executing this binary alone will work out of the box. 
+
+However, for custom fonts, `chordy-cpp` requires that `/cpp/font.ttf` be in the same directory. For the standard version of `chordy-cpp`, either clone the repository and run the binary or download both `./cpp/{chordy|font.ttf}` and run the binary. 
+
+For a source build using CMake, run `./build.sh` in `/cpp`. 
 
 ## Python Edition 
 `chordy-py` maintains three threads to isolate audio streaming, chord recognition, and GUI rendering, with dequeues for data management.
