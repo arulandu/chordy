@@ -38,5 +38,5 @@ endif()
 target_link_libraries(${PROJECT_NAME} PortAudio)
 
 # Resources
-add_custom_target(res COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/res.cmake)
+add_custom_target(res COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/cmake/res.cmake)
 add_dependencies(${PROJECT_NAME} res)

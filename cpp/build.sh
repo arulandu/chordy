@@ -1,1 +1,1 @@
-cmake -B./build -S. && make -C ./build 
+cmake -B./build -S. -G Ninja && ninja -C ./build
