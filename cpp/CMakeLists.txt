@@ -37,16 +37,6 @@ if(NOT portaudio_POPULATED)
 endif()
 target_link_libraries(${PROJECT_NAME} PortAudio)
 
-FetchContent_Declare(eigen
-    GIT_REPOSITORY "https://gitlab.com/libeigen/eigen.git"
-    GIT_TAG ab310943d62982a45734f52fed782ec57c9aa6a0 # as of 08/12/2024 (v3.4.0)
-)
-FetchContent_GetProperties(eigen)
-if(NOT eigen_POPULATED)
-    FetchContent_Populate(eigen)
-    add_subdirectory(${eigen_SOURCE_DIR}) # using target "PortAudio"
-endif()
-include_directories(
-    ${eigen_SOURCE_DIR}
-)
-target_link_libraries(${PROJECT_NAME} eigen)
+# Resources
+add_custom_target(res COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_LIST_DIR}/res.cmake)
+add_dependencies(${PROJECT_NAME} res)

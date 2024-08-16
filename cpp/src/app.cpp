@@ -21,7 +21,6 @@
 #include <GLES2/gl2.h>
 #endif
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
-#include "Eigen/Dense"
 
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
@@ -96,7 +95,7 @@ struct Settings {
 
 void compute(Settings &settings, ComputeContext &ctx){
     int n = settings.samplesPerBuffer*settings.computeBufferCount;
-    float* readData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*n*settings.computeRingFrameCount);
+    float* readData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float)*n*settings.computeRingFrameCount);
     ChordConfig cfg = initChordConfig(n, settings.sampleRate, settings.octaves, settings.threshold);
     auto st = std::chrono::high_resolution_clock::now();
     auto end = st;
@@ -198,12 +197,12 @@ int gui(int argc, char* argv[])
     if(paErr != paNoError) return pa_error_handler(paErr);
 
     PaContext paCtx;
-    paCtx.rBuffFromRTData = PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t) * settings.samplesPerBuffer * settings.ringBufferCount);
+    paCtx.rBuffFromRTData = PaUtil_AllocateZeroInitializedMemory(sizeof(float) * settings.samplesPerBuffer * settings.ringBufferCount);
     if(paCtx.rBuffFromRTData == nullptr) return 1;
-    PaUtil_InitializeRingBuffer(&paCtx.rBuffFromRT, sizeof(float32_t)*settings.samplesPerBuffer, settings.ringBufferCount, paCtx.rBuffFromRTData);
-    float* readData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*settings.samplesPerBuffer*settings.ringBufferCount);
-    float* displayData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*settings.displayBufferCount*settings.samplesPerBuffer);
-    float* tmpData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*settings.displayBufferCount*settings.samplesPerBuffer);
+    PaUtil_InitializeRingBuffer(&paCtx.rBuffFromRT, sizeof(float)*settings.samplesPerBuffer, settings.ringBufferCount, paCtx.rBuffFromRTData);
+    float* readData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float)*settings.samplesPerBuffer*settings.ringBufferCount);
+    float* displayData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float)*settings.displayBufferCount*settings.samplesPerBuffer);
+    float* tmpData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float)*settings.displayBufferCount*settings.samplesPerBuffer);
     int displayWriteInd = 0;
     float xDisplay[settings.samplesPerBuffer*settings.displayBufferCount], xRead[settings.samplesPerBuffer*settings.ringBufferCount], xSpec[settings.samplesPerBuffer*settings.computeBufferCount];
     for(int i = 0; i < settings.samplesPerBuffer*settings.displayBufferCount; i++){
@@ -230,15 +229,15 @@ int gui(int argc, char* argv[])
     // initialize compute thread
     ComputeContext computeCtx;
     ChordComputeData* chordComputeData;
-    computeCtx.rBuffFromGuiData = PaUtil_AllocateZeroInitializedMemory(sizeof(float32_t)*settings.samplesPerBuffer*settings.computeBufferCount*settings.computeRingFrameCount);
-    PaUtil_InitializeRingBuffer(&computeCtx.rBuffFromGui, sizeof(float32_t)*settings.samplesPerBuffer*settings.computeBufferCount, settings.computeRingFrameCount, computeCtx.rBuffFromGuiData);
+    computeCtx.rBuffFromGuiData = PaUtil_AllocateZeroInitializedMemory(sizeof(float)*settings.samplesPerBuffer*settings.computeBufferCount*settings.computeRingFrameCount);
+    PaUtil_InitializeRingBuffer(&computeCtx.rBuffFromGui, sizeof(float)*settings.samplesPerBuffer*settings.computeBufferCount, settings.computeRingFrameCount, computeCtx.rBuffFromGuiData);
     computeCtx.rBuffToGuiData = PaUtil_AllocateZeroInitializedMemory(sizeof(ChordComputeData*)*settings.computeRingFrameCount);
     PaUtil_InitializeRingBuffer(&computeCtx.rBuffToGui, sizeof(ChordComputeData*), settings.computeRingFrameCount, computeCtx.rBuffToGuiData);
     std::thread computeThread(compute, std::ref(settings), std::ref(computeCtx));
 
     ImFont* fontSm, *fontMd, *fontLg; 
     auto execPath = std::filesystem::path(argv[0]).parent_path();
-    std::string fontFile = execPath / "font.ttf";
+    std::string fontFile = execPath / "res/font.ttf";
     if(std::filesystem::exists(fontFile)) {
         fontSm = io.Fonts->AddFontFromFileTTF(fontFile.c_str(), 16.f);
         fontMd = io.Fonts->AddFontFromFileTTF(fontFile.c_str(), 24.f);
@@ -273,17 +272,17 @@ int gui(int argc, char* argv[])
             int countRight = settings.displayBufferCount*settings.samplesPerBuffer-displayWriteInd, countLeft = 0;
             if(available > countRight){
                 countLeft = available - countRight; // ensure that settings.displayBufferCount >= settings.ringBufferCount
-                memcpy(&tmpData[displayWriteInd], readData, sizeof(float32_t)*countRight);
-                memcpy(&tmpData[0], &readData[countRight], sizeof(float32_t)*countLeft);
+                memcpy(&tmpData[displayWriteInd], readData, sizeof(float)*countRight);
+                memcpy(&tmpData[0], &readData[countRight], sizeof(float)*countLeft);
                 displayWriteInd = countLeft;
             } else {
                 countRight = available;
-                memcpy(&tmpData[displayWriteInd], readData, sizeof(float32_t)*countRight);
+                memcpy(&tmpData[displayWriteInd], readData, sizeof(float)*countRight);
                 displayWriteInd += countRight;
             }
 
-            memcpy(displayData, &tmpData[displayWriteInd], sizeof(float32_t)*(settings.displayBufferCount*settings.samplesPerBuffer-displayWriteInd));
-            memcpy(&displayData[settings.samplesPerBuffer*settings.displayBufferCount-displayWriteInd], tmpData, sizeof(float32_t)*displayWriteInd);
+            memcpy(displayData, &tmpData[displayWriteInd], sizeof(float)*(settings.displayBufferCount*settings.samplesPerBuffer-displayWriteInd));
+            memcpy(&displayData[settings.samplesPerBuffer*settings.displayBufferCount-displayWriteInd], tmpData, sizeof(float)*displayWriteInd);
             PaUtil_WriteRingBuffer(&computeCtx.rBuffFromGui, &displayData[settings.samplesPerBuffer*(settings.displayBufferCount-settings.computeBufferCount)], 1);
         }
         
