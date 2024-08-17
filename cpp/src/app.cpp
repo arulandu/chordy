@@ -43,7 +43,7 @@ struct GuiState {
     const float mainDisplayRatio = 0.8f;
     bool collapsed = false;
     int octaves = 4;
-    float threshold = 3.f;
+    float threshold = 2.f;
     float plotMxs[3] = {0.2, 14.87, 17.3};
 };
 
@@ -89,7 +89,7 @@ struct Settings {
     int computeBufferCount = 8; // must be < displayBufferCount
     int computeRingFrameCount = 2; // choose small, even 1 tbh
     int octaves = 4;
-    float threshold = 3.f;
+    float threshold = 2.f;
     std::string version = "v1.0.0";
 };
 
