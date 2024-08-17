@@ -97,12 +97,12 @@ void compute(Settings &settings, ComputeContext &ctx){
     int n = settings.samplesPerBuffer*settings.computeBufferCount;
     float* readData = (float*)PaUtil_AllocateZeroInitializedMemory(sizeof(float)*n*settings.computeRingFrameCount);
     ChordConfig cfg = initChordConfig(n, settings.sampleRate, settings.octaves, settings.threshold);
-    auto st = std::chrono::high_resolution_clock::now();
-    auto end = st;
+    auto st = std::chrono::high_resolution_clock::now(); auto end = st;
     double dt = 0;
     while(ctx.run) {
         int available = PaUtil_GetRingBufferReadAvailable(&ctx.rBuffFromGui);
         if(available > 0){
+            st = std::chrono::high_resolution_clock::now();
             PaUtil_ReadRingBuffer(&ctx.rBuffFromGui, readData, available);
             float* samples = &readData[n*(available-1)];
             ChordComputeData* pt = initChordComputeData(n); 
@@ -113,7 +113,6 @@ void compute(Settings &settings, ComputeContext &ctx){
             PaUtil_WriteRingBuffer(&ctx.rBuffToGui, &pt, 1);
             end = std::chrono::high_resolution_clock::now();
             dt = std::chrono::duration<double, std::milli>(end-st).count(); // ms 
-            st = end;
         }
     }
 
@@ -438,7 +437,7 @@ int gui(int argc, char* argv[])
 
                 ImGui::TextColored(ImVec4(1, 1, 1, 1), "Main:    %.2f fps", io.Framerate);
                 if(chordComputeData){ 
-                    ImGui::TextColored(ImVec4(1, 1, 1, 1), "Compute: %.2f fps", 1000./chordComputeData->dt);
+                    ImGui::TextColored(ImVec4(1, 1, 1, 1), "Compute: %.2f ms/job", chordComputeData->dt);
                 }
                 ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
                 
