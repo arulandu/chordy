@@ -1,1 +1,1 @@
-cmake -B./build -S. -G Ninja && ninja -C ./build
+cmake -B./build -S. -G Ninja -DCMAKE_BUILD_TYPE=$1 && ninja -C ./build
