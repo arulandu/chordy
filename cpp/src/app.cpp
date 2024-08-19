@@ -20,23 +20,25 @@
 #if defined(IMGUI_IMPL_OPENGL_ES2)
 #include <GLES2/gl2.h>
 #endif
-#include <GLFW/glfw3.h> // Will drag system OpenGL headers
+#include <GLFW/glfw3.h> // drag system OpenGL headers
 
-// [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
-// To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
-// Your own project should not be affected, as you are likely to link with a newer binary of GLFW that is adequate for your version of Visual Studio.
-#if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
-#pragma comment(lib, "legacy_stdio_definitions")
-#endif
-
-// This example can also compile and run with Emscripten! See 'Makefile.emscripten' for details.
 #ifdef __EMSCRIPTEN__
 #include "../libs/emscripten/emscripten_mainloop_stub.h"
 #endif
 
-ImVec4 alpha(ImVec4 c, float a) {
-    return ImVec4(c.x, c.y, c.z, a);
-}
+struct Settings {
+    std::string version = "v1.0.0";
+    float sampleRate = 44100.0;
+    unsigned long samplesPerBuffer = 1024;
+    int ringBufferCount = 64;
+    int displayBufferCount = 256; 
+    int computeBufferCount = 8; // must be < displayBufferCount
+    int computeRingFrameCount = 2; // choose small, even 1 tbh
+    int octaves = 4;
+    float threshold = 2.f;
+    float maxDisplayHz = 1100;
+    ImVec4 accentCol1 = ImColor::HSV(219/360., .58, .93), accentCol2 = ImColor::HSV(99/360., .58, .93), accentCol3 = ImColor::HSV(349/360., .58, .93);
+};
 
 struct GuiState { 
     std::string chordName = "C#";
@@ -47,6 +49,15 @@ struct GuiState {
     float plotMxs[3] = {0.2, 14.87, 17.3};
 };
 
+ImVec4 alpha(ImVec4 c, float a) {
+    return ImVec4(c.x, c.y, c.z, a);
+}
+
+static void glfw_error_callback(int error, const char* description)
+{
+    fprintf(stderr, "GLFW Error %d: %s\n", error, description);
+}
+
 struct PaContext {
     PaUtilRingBuffer rBuffFromRT;
     void* rBuffFromRTData;
@@ -54,15 +65,8 @@ struct PaContext {
 
 int paCallback(const void* inputBuffer, void* output, unsigned long samplesPerBuffer, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags flags, void* userData) {
     PaContext* paCtx = (PaContext*) userData;
-
     PaUtil_WriteRingBuffer(&paCtx->rBuffFromRT, inputBuffer, 1);
-    // PaUtil_Read
     return paContinue;
-}
-
-static void glfw_error_callback(int error, const char* description)
-{
-    fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
 static int pa_error_handler(PaError err){
@@ -78,19 +82,6 @@ struct ComputeContext {
 
     PaUtilRingBuffer rBuffToGui;
     void* rBuffToGuiData;
-};
-
-struct Settings {
-    float sampleRate = 44100.0;
-    unsigned long samplesPerBuffer = 1024;
-    int ringBufferCount = 64;
-    int displaySamples = 1024*256;
-    int displayBufferCount = (displaySamples/samplesPerBuffer) + (displaySamples % samplesPerBuffer == 0 ? 0 : 1);
-    int computeBufferCount = 8; // must be < displayBufferCount
-    int computeRingFrameCount = 2; // choose small, even 1 tbh
-    int octaves = 4;
-    float threshold = 2.f;
-    std::string version = "v1.0.0";
 };
 
 void compute(Settings &settings, ComputeContext &ctx){
@@ -163,15 +154,10 @@ int gui(int argc, char* argv[])
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
-    //io.ConfigViewportsNoAutoMerge = true;
-    //io.ConfigViewportsNoTaskBarIcon = true;
 
-    // Setup Dear ImGui style
     ImGui::StyleColorsDark();
-    //ImGui::StyleColorsLight();
 
     // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
     ImGuiStyle& style = ImGui::GetStyle();
@@ -288,7 +274,8 @@ int gui(int argc, char* argv[])
         available = PaUtil_GetRingBufferReadAvailable(&computeCtx.rBuffToGui);
         if(available > 0) {
             if(chordComputeData) freeChordComputeData(chordComputeData);
-            while(available--) PaUtil_ReadRingBuffer(&computeCtx.rBuffToGui, &chordComputeData, 1); // TODO: Optimize
+            while(available--) PaUtil_ReadRingBuffer(&computeCtx.rBuffToGui, &chordComputeData, 1);
+            
             state.chordName = chordComputeData->name;
             float sm = 0; for(int p = 0; p < 12; p++) sm += chordComputeData->chroma[p];
             for(int p = 0; p < 12; p++) chordComputeData->chroma[p] /= sm; // convert to relative chroma
@@ -306,7 +293,6 @@ int gui(int argc, char* argv[])
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        const ImVec4 accentCol1 = ImColor::HSV(219/360., .58, .93), accentCol2 = ImColor::HSV(99/360., .58, .93), accentCol3 = ImColor::HSV(349/360., .58, .93);
         // Main Window
         {
             ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -339,7 +325,7 @@ int gui(int argc, char* argv[])
                 for(int p = 0; p < 12; p++) {
                     ImGui::SetCursorPosX((winSize.x-total)*0.5f+run);
                     ImGui::SetCursorPosY(notesY);
-                    ImGui::TextColored(alpha(accentCol1, chordComputeData->chroma[p]*0.9+0.1), notes[p].c_str());
+                    ImGui::TextColored(alpha(settings.accentCol1, chordComputeData->chroma[p]*0.9+0.1), notes[p].c_str());
                     run += ImGui::CalcTextSize(notes[p].c_str()).x+spacing;
                 }
                 if(fontMd) ImGui::PopFont();
@@ -350,7 +336,6 @@ int gui(int argc, char* argv[])
 
             ImPlotFlags plotFlags = ImPlotFlags_CanvasOnly;
             ImPlotAxisFlags plotAxisFlags = ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_NoHighlight;
-            //    plotAxisFlags ^= ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickLabels;
             ImPlotStyle& plotStyle = ImPlot::GetStyle();
             plotStyle.Colors[ImPlotCol_FrameBg] = ImVec4(1, 1, 1, 0);
             plotStyle.Colors[ImPlotCol_PlotBg] = ImVec4(0, 1, 0, 0);
@@ -366,7 +351,7 @@ int gui(int argc, char* argv[])
             ImPlot::SetNextAxesLimits(-settings.displayBufferCount*(long)settings.samplesPerBuffer*1.f/settings.sampleRate, 0, -state.plotMxs[0], state.plotMxs[0], ImPlotCond_Always); 
             if (ImPlot::BeginPlot("Waveform", ImVec2(-1, winSize.y*plotWaveHeight), plotFlags)) { 
                 ImPlot::SetupAxes("Time", "Amplitude", plotAxisFlags, plotAxisFlags);
-                ImPlot::SetNextLineStyle(accentCol1);
+                ImPlot::SetNextLineStyle(settings.accentCol1);
                 ImPlot::PlotLine("Audio", xDisplay, displayData, settings.displayBufferCount*settings.samplesPerBuffer);
                 ImPlot::EndPlot();
             }
@@ -376,15 +361,13 @@ int gui(int argc, char* argv[])
             }
             
             if(chordComputeData) {
-                // plot first 1000hz of spectra
-                const float maxDisplayHz = 1100;
                 ImGui::SetCursorPosY(winSize.y*(1-plotSpecHeight-plotHPSHeight));
                 
-                ImPlot::SetNextAxesLimits(0, maxDisplayHz, 0, exp2(state.plotMxs[1]), ImPlotCond_Always); 
+                ImPlot::SetNextAxesLimits(0, settings.maxDisplayHz, 0, exp2(state.plotMxs[1]), ImPlotCond_Always); 
                 if (ImPlot::BeginPlot("Spectra", ImVec2(-1, winSize.y*plotSpecHeight), plotFlags)) {
                     ImPlot::SetupAxes("Frequency", "Power", plotAxisFlags, plotAxisFlags);
-                    ImPlot::SetNextLineStyle(accentCol2);
-                    ImPlot::PlotLine("Spectra", xSpec, chordComputeData->spec, settings.computeBufferCount*settings.samplesPerBuffer*maxDisplayHz/settings.sampleRate);
+                    ImPlot::SetNextLineStyle(settings.accentCol2);
+                    ImPlot::PlotLine("Spectra", xSpec, chordComputeData->spec, settings.computeBufferCount*settings.samplesPerBuffer*settings.maxDisplayHz/settings.sampleRate);
                     ImPlot::EndPlot();
                 }
                 if(ImGui::BeginItemTooltip()) {
@@ -393,11 +376,11 @@ int gui(int argc, char* argv[])
                 }
                 
                 ImGui::SetCursorPosY(winSize.y*(1-plotHPSHeight));
-                ImPlot::SetNextAxesLimits(0, maxDisplayHz, 0, exp2(state.plotMxs[2]), ImPlotCond_Always); 
+                ImPlot::SetNextAxesLimits(0, settings.maxDisplayHz, 0, exp2(state.plotMxs[2]), ImPlotCond_Always); 
                 if (ImPlot::BeginPlot("HPS", ImVec2(-1, winSize.y*plotHPSHeight), plotFlags)) {
                     ImPlot::SetupAxes("Frequency", "HPS", plotAxisFlags^ImPlotAxisFlags_NoTickLabels, plotAxisFlags);
-                    ImPlot::SetNextLineStyle(accentCol3);
-                    ImPlot::PlotLine("HPS", xSpec, chordComputeData->hps, settings.computeBufferCount*settings.samplesPerBuffer*maxDisplayHz/settings.sampleRate);
+                    ImPlot::SetNextLineStyle(settings.accentCol3);
+                    ImPlot::PlotLine("HPS", xSpec, chordComputeData->hps, settings.computeBufferCount*settings.samplesPerBuffer*settings.maxDisplayHz/settings.sampleRate);
                     ImPlot::EndPlot();
                 }
                 if(ImGui::BeginItemTooltip()) {
@@ -451,7 +434,7 @@ int gui(int argc, char* argv[])
                     ImGui::SetTooltip("octaves for HPS/chroma calculation.");
                     ImGui::EndTooltip();
                 }
-                if(ImGui::SliderInt("##1", &state.octaves, 1, 8, "%d", ImGuiSliderFlags_NoInput|ImGuiSliderFlags_AlwaysClamp)){
+                if(ImGui::SliderInt("##1", &state.octaves, 1, 6, "%d", ImGuiSliderFlags_NoInput|ImGuiSliderFlags_AlwaysClamp)){
                     settings.octaves = state.octaves;
                 }
                 ImGui::Spacing();
@@ -471,19 +454,19 @@ int gui(int argc, char* argv[])
                     ImGui::SetTooltip("Maximum for the y-axis of each plot.");
                     ImGui::EndTooltip();
                 }
-                ImGui::PushStyleColor(ImGuiCol_SliderGrab, alpha(accentCol1, .4));                
-                ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, alpha(accentCol1, .6));                
-                ImGui::PushStyleColor(ImGuiCol_Text, accentCol1);                
+                ImGui::PushStyleColor(ImGuiCol_SliderGrab, alpha(settings.accentCol1, .4));                
+                ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, alpha(settings.accentCol1, .6));                
+                ImGui::PushStyleColor(ImGuiCol_Text, settings.accentCol1);                
                 ImGui::SliderFloat("Waveform", &state.plotMxs[0], 0, 2, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
-                ImGui::PushStyleColor(ImGuiCol_SliderGrab, alpha(accentCol2, .4));                
-                ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, alpha(accentCol2, .6));                
-                ImGui::PushStyleColor(ImGuiCol_Text, accentCol2);                
+                ImGui::PushStyleColor(ImGuiCol_SliderGrab, alpha(settings.accentCol2, .4));                
+                ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, alpha(settings.accentCol2, .6));                
+                ImGui::PushStyleColor(ImGuiCol_Text, settings.accentCol2);                
                 ImGui::SliderFloat("log(power)", &state.plotMxs[1], 0, 20, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
-                ImGui::PushStyleColor(ImGuiCol_SliderGrab, alpha(accentCol3, .4));                
-                ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, alpha(accentCol3, .6));                
-                ImGui::PushStyleColor(ImGuiCol_Text, accentCol3);                
+                ImGui::PushStyleColor(ImGuiCol_SliderGrab, alpha(settings.accentCol3, .4));                
+                ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, alpha(settings.accentCol3, .6));                
+                ImGui::PushStyleColor(ImGuiCol_Text, settings.accentCol3);                
                 ImGui::SliderFloat("log2(hps)", &state.plotMxs[2], 0, 51, "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
                 ImGui::PopStyleColor(14);

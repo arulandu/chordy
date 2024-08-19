@@ -1,13 +1,14 @@
 #include <map>
 #include <iostream>
 #include <algorithm>
+#include <cassert>
 #include "chord.h"
 
 // TODO: redo spec/hps buffers to n/2
 ChordComputeData* initChordComputeData(int n) {
     ChordComputeData* x = (ChordComputeData*)malloc(sizeof(ChordComputeData));
-    x->spec = (float*)malloc(sizeof(float)*n);
-    x->hps = (float*)malloc(sizeof(float)*n);
+    x->spec = (float*)malloc(sizeof(float)*(n/2+1));
+    x->hps = (float*)malloc(sizeof(float)*(n/2+1));
     x->chroma = (float*)malloc(sizeof(float)*12);
     return x;
 }
@@ -62,12 +63,16 @@ int freq2Bin(float freq, int sampleRate, int n) {
 void computeChord(ChordComputeData& out, float* samples, ChordConfig& cfg) {
     kiss_fftr(cfg.cfg, samples, cfg.out);
     
-    for(int i = 0; i < cfg.n; i++) out.spec[i] = cfg.out[i].r * cfg.out[i].r + cfg.out[i].i * cfg.out[i].i;
-    memset(out.hps, 0, sizeof(float)*cfg.n);
+    for(int i = 0; i < cfg.n/2; i++) out.spec[i] = cfg.out[i].r * cfg.out[i].r + cfg.out[i].i * cfg.out[i].i;
 
-    for(int i = 3; i < cfg.n/2; i++){ // set first 3 bins to 0
+    for(int i = 0; i < cfg.n/2; i++){ // set first 3 bins to 0
+        if(i < 3) {
+            out.hps[i] = 0;
+            continue;
+        }
+
         out.hps[i] = 1;
-        for(int r = 1; r <= cfg.octaves; r++){
+        for(int r = 1; r <= cfg.octaves && r*i < cfg.n/2; r++){
             out.hps[i] *= out.spec[r*i];
         }
         out.hps[i] = sqrtf(out.hps[i]);
@@ -78,7 +83,7 @@ void computeChord(ChordComputeData& out, float* samples, ChordConfig& cfg) {
     for(int p = 0; p < 12; p++) {
         float lbf = mid/qrat, ubf = mid*qrat;
         for(int r = 0; r < cfg.octaves; r++){
-            const int lbi = freq2Bin(lbf, cfg.sampleRate, cfg.n), ubi = freq2Bin(ubf, cfg.sampleRate, cfg.n);
+            const int lbi = freq2Bin(lbf, cfg.sampleRate, cfg.n), ubi = std::min(freq2Bin(ubf, cfg.sampleRate, cfg.n), cfg.n/2);
             float sm = 0; for(int j = lbi; j <= ubi; j++) sm += out.spec[j];
             out.chroma[p] += sm/(ubi-lbi+1);
 
