@@ -33,9 +33,9 @@ struct Settings {
     int ringBufferCount = 64;
     int displayBufferCount = 256; 
     int computeBufferCount = 8; // must be < displayBufferCount
-    int computeRingFrameCount = 2; // choose small, even 1 tbh
+    int computeRingFrameCount = 1; // choose small, even 1 tbh
     int octaves = 4;
-    float threshold = 2.f;
+    float threshold = 0.016f;
     float maxDisplayHz = 1100;
     ImVec4 accentCol1 = ImColor::HSV(219/360., .58, .93), accentCol2 = ImColor::HSV(99/360., .58, .93), accentCol3 = ImColor::HSV(349/360., .58, .93);
 };
@@ -45,7 +45,7 @@ struct GuiState {
     const float mainDisplayRatio = 0.8f;
     bool collapsed = false;
     int octaves = 4;
-    float threshold = 2.f;
+    float threshold = 0.016f;
     float plotMxs[3] = {0.2, 14.87, 17.3};
 };
 
@@ -444,7 +444,7 @@ int gui(int argc, char* argv[])
                     ImGui::SetTooltip("N/A threshold for chord/avg ratio.");
                     ImGui::EndTooltip();
                 }
-                if(ImGui::SliderFloat("##2", &state.threshold, 1, 4, "%.3f", ImGuiSliderFlags_NoInput|ImGuiSliderFlags_AlwaysClamp)){
+                if(ImGui::SliderFloat("##2", &state.threshold, 0.001, 0.025, "%.3f", ImGuiSliderFlags_NoInput|ImGuiSliderFlags_AlwaysClamp)){
                     settings.threshold = state.threshold;
                 }
                 ImGui::Spacing();

@@ -4,7 +4,6 @@
 #include <cassert>
 #include "chord.h"
 
-// TODO: redo spec/hps buffers to n/2
 ChordComputeData* initChordComputeData(int n) {
     ChordComputeData* x = (ChordComputeData*)malloc(sizeof(ChordComputeData));
     x->spec = (float*)malloc(sizeof(float)*(n/2+1));
@@ -45,6 +44,7 @@ std::string maskIndToName(int ind) {
     switch (ind) {
         case 0: return "Maj";
         case 1: return "Min"; 
+        default: return "";
     }
 }
 
@@ -60,57 +60,71 @@ int freq2Bin(float freq, int sampleRate, int n) {
     return std::floorf(freq*n/sampleRate);
 }
 
+
+
 void computeChord(ChordComputeData& out, float* samples, ChordConfig& cfg) {
     kiss_fftr(cfg.cfg, samples, cfg.out);
     
-    for(int i = 0; i < cfg.n/2; i++) out.spec[i] = cfg.out[i].r * cfg.out[i].r + cfg.out[i].i * cfg.out[i].i;
-
-    for(int i = 0; i < cfg.n/2; i++){ // set first 3 bins to 0
-        if(i < 3) {
-            out.hps[i] = 0;
-            continue;
-        }
-
-        out.hps[i] = 1;
-        for(int r = 1; r <= cfg.octaves && r*i < cfg.n/2; r++){
-            out.hps[i] *= out.spec[r*i];
-        }
-        out.hps[i] = sqrtf(out.hps[i]);
+    for(int i = 0; i < cfg.n/2; i++) {
+        out.spec[i] = cfg.out[i].r * cfg.out[i].r + cfg.out[i].i * cfg.out[i].i;
     }
-
+    
+    const int highPassBin = freq2Bin(50, cfg.sampleRate, cfg.n);
     const float qrat = 1.02930223664349F; // quarter tone ratio
     float mid = midi2Freq(60);
     for(int p = 0; p < 12; p++) {
         float lbf = mid/qrat, ubf = mid*qrat;
+        out.chroma[p] = 1;
         for(int r = 0; r < cfg.octaves; r++){
+            // downsample to bins
             const int lbi = freq2Bin(lbf, cfg.sampleRate, cfg.n), ubi = std::min(freq2Bin(ubf, cfg.sampleRate, cfg.n), cfg.n/2);
-            float sm = 0; for(int j = lbi; j <= ubi; j++) sm += out.spec[j];
-            out.chroma[p] += sm/(ubi-lbi+1);
+            // ignore first 3 bins (high pass filter)
+            float sm = 0; for(int j = std::max(lbi, highPassBin); j <= ubi; j++) sm += out.spec[j];
+            float avg = sm/(ubi-lbi+1);
 
+            // harmonic product spectrum
+            out.chroma[p] *= avg; 
             lbf *= 2.F; ubf *= 2.F;
         }
         mid *= qrat*qrat;
     }
 
-    float chords[2][12];
-    std::pair<int, int> mxl = {0, 0};
-    for(int i = 0; i < 2; i++) {
-        for(int p = 0; p < 12; p++) {
-            float sm = 0, c = 0;
-            for(int q = 0; q < 12; q++) {
-                sm += mask[i][q]*out.chroma[(p+q)%12];
-                c += mask[i][q];
-            }
-            chords[i][p] = sm/c;
-            if(chords[i][p] > chords[mxl.first][mxl.second]) mxl = {i, p};
+    float chords[24]; int inds[24];
+    for(int c = 0; c < 24; c++) {
+        inds[c] = c;
+        int i = c/12, p = c%12;
+        float sm = 0, sz = 0;
+        for(int q = 0; q < 12; q++) {
+            sm += mask[i][q]*out.chroma[(p+q)%12];
+            sz += mask[i][q];
         }
+        chords[c] = sm/sz;
     }
 
-    float avg = 0; for(int p = 0; p < 12; p++) avg += out.chroma[p];
-    avg /= 12.;
+    std::sort(inds, inds+24, [&chords](int a, int b) {
+        return chords[a] > chords[b];
+    });
 
-    if(chords[mxl.first][mxl.second]/avg > cfg.threshold){
-        out.name = notes[mxl.second] + " " + maskIndToName(mxl.first); 
+    float maxSpec = 0;
+    for(int i = highPassBin; i < cfg.n/2; i++) {
+        maxSpec = std::max(maxSpec, out.spec[i]);
+    }
+    
+    for(int c = 0; c < 24; c++) chords[c] /= maxSpec;
+
+    int best = 0;
+    for(int c = 0; c < 24; c++) {
+        if(chords[c] > chords[best]) best = c;
+    }
+
+    if(chords[best] > cfg.threshold){
+        out.name = notes[best%12] + " " + maskIndToName(best/12); 
+        std::cout << "COMPUTE: " << chords[best] << " / " << maxSpec << " \t<- ";        
+        for(int i = 0; i < 5; i++) {
+            int idx = inds[i];
+            std::cout << notes[idx%12] << " " << maskIndToName(idx/12) << ", ";
+        }
+        std::cout << std::endl;
     } else {
         out.name = "N/A";
     }
