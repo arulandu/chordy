@@ -33,7 +33,7 @@ struct Settings {
     int ringBufferCount = 64;
     int displayBufferCount = 256; 
     int computeBufferCount = 8; // must be < displayBufferCount
-    int computeRingFrameCount = 1; // choose small, even 1 tbh
+    int computeRingFrameCount = 1;
     int octaves = 4;
     float threshold = 0.016f;
     float maxDisplayHz = 1100;
